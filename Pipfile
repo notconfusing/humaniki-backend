@@ -9,6 +9,7 @@ verify_ssl = true
 flask = "*"
 flask-sqlalchemy-session = "*"
 humaniki-schema = {editable = true,path = "./../humaniki-schema"}
+mysqlclient = "*"
 
 [requires]
 python_version = "3.7"
