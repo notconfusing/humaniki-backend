@@ -10,6 +10,8 @@ flask = "*"
 flask-sqlalchemy-session = "*"
 humaniki-schema = {editable = true,path = "./../humaniki-schema"}
 mysqlclient = "*"
+pandas = "*"
+pytest = "*"
 
 [requires]
 python_version = "3.7"
