@@ -61,10 +61,15 @@ def build_gap_response(metrics_res):
     :return: response dict
     """
     # TODO need to exclude the bias-values from the aggregations
-    number_of_aggregations = len(metrics_res[0][2].aggregations['facets'])
+    first_res_third_sql_alchemy_obj = metrics_res[0][2]
+    number_of_aggregations = len(first_res_third_sql_alchemy_obj.aggregations['facets'])
     print(f"number_of_aggregations:{number_of_aggregations}")
     resp_dict = build_layer_default_dict(number_of_aggregations)
     for metric_obj, properties_obj, aggregation_obj in metrics_res:
-        print(f'aggregations are;{aggregation_obj.aggregations}')
-        setInDict(resp_dict, aggregation_obj.aggregations['facets'], {metric_obj.bias_value: metric_obj.total})
+        if aggregation_obj.aggregations['facets'][0]=='enwiki':
+            print(f'aggregations are;{aggregation_obj.aggregations}')
+        resp_dict_path = []
+        resp_dict_path.extend(aggregation_obj.aggregations['facets'])
+        resp_dict_path.append(metric_obj.bias_value)
+        setInDict(resp_dict, resp_dict_path, metric_obj.total)
     return resp_dict
