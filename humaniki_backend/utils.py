@@ -1,5 +1,8 @@
 from datetime import datetime
 from collections import defaultdict
+from functools import reduce  # forward compatibility for Python 3
+import operator
+
 from humaniki_schema import utils
 
 
@@ -34,6 +37,7 @@ def determine_population_conflict(population, query_params):
     else:
         return getattr(utils.PopulationDefinition, population.upper()).value, was_corrected
 
+
 def build_layer_default_dict(n):
     """
     Build an n-level defaultdict    not sure if this is clever or unnecessary brain surgery, i'll never undestand again
@@ -45,14 +49,25 @@ def build_layer_default_dict(n):
         ret = defaultdict(lambda: ret)
     return ret
 
-from functools import reduce  # forward compatibility for Python 3
-import operator
 
-def getFromDict(dataDict, mapList):
-    return reduce(operator.getitem, mapList, dataDict)
+def get_dict_path(dct, key_path):
+    '''
+    :param dct: an n-nested dict of dicts
+    :param key_path: a list of keys
+    :return:
+    '''
+    return reduce(operator.getitem, key_path, dct)
 
-def setInDict(dataDict, mapList, value):
-    getFromDict(dataDict, mapList[:-1])[mapList[-1]] = value
+
+def set_dict_path(dct, key_path, value):
+    """
+    :param dct:  an n-nested dict of dicts
+    :param key_path: a list of keys
+    :param value: a value to set a path location
+    :return:
+    """
+    get_dict_path(dct, key_path[:-1])[key_path[-1]] = value
+
 
 def build_gap_response(metrics_res):
     """
@@ -62,14 +77,14 @@ def build_gap_response(metrics_res):
     """
     # TODO need to exclude the bias-values from the aggregations
     first_res_third_sql_alchemy_obj = metrics_res[0][2]
-    number_of_aggregations = len(first_res_third_sql_alchemy_obj.aggregations['facets'])
+    number_of_aggregations = len(first_res_third_sql_alchemy_obj.aggregations)
     print(f"number_of_aggregations:{number_of_aggregations}")
     resp_dict = build_layer_default_dict(number_of_aggregations)
     for metric_obj, properties_obj, aggregation_obj in metrics_res:
-        if aggregation_obj.aggregations['facets'][0]=='enwiki':
-            print(f'aggregations are;{aggregation_obj.aggregations}')
+        # if aggregation_obj.aggregations['facets'][0]=='enwiki':
+        #     print(f'aggregations are;{aggregation_obj.aggregations}')
         resp_dict_path = []
-        resp_dict_path.extend(aggregation_obj.aggregations['facets'])
+        resp_dict_path.extend(aggregation_obj.aggregations)
         resp_dict_path.append(metric_obj.bias_value)
-        setInDict(resp_dict, resp_dict_path, metric_obj.total)
+        set_dict_path(resp_dict, resp_dict_path, metric_obj.total)
     return resp_dict

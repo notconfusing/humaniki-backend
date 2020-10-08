@@ -20,12 +20,14 @@ def home():
     return jsonify(latest_fill_id, latest_fill_date)
 
 
-@app.route("/v1/gender/gap/<string:snapshot>/<string:population>/properties")
-def gap(snapshot, population):
+@app.route("/v1/<string:bias>/gap/<string:snapshot>/<string:population>/properties")
+def gap(bias, snapshot, population):
     return_warnings = {}
     errors = {}
     query_params = request.values
+    # TODO catch these errors in their constituent parts and then have the logic handled up here
     try:
+        #TODO include validating bias
         valid_request = assert_gap_request_valid(snapshot, population, query_params)
     except AssertionError as ae:
         return jsonify(ae)
@@ -37,7 +39,8 @@ def gap(snapshot, population):
     ordered_query_params = order_query_params(query_params)
     # get properties-id
     try:
-        properties_id = get_properties_id(session, ordered_query_params, bias=Properties.GENDER.value)
+        bias_property = getattr(Properties, bias.upper()).value
+        properties_id = get_properties_id(session, ordered_query_params, bias_property=bias_property)
     except ValueError as ve:
         errors['properties_id'] = str(ve)
     # get aggregations-id

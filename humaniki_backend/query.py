@@ -21,15 +21,15 @@ def order_query_params(query_params):
     return sorted_pid_val
 
 
-def get_properties_id(session, ordered_query_params, bias):
+def get_properties_id(session, ordered_query_params, bias_property):
     # get the properties ID based on the properties or return Error
     ordered_properties = ordered_query_params.keys()
     properties_id_q = session.query(metric_properties_j.id)\
-        .filter(metric_properties_j.properties['bias'] == bias)\
-        .filter(metric_properties_j.properties_len==len(ordered_properties))
+        .filter(metric_properties_j.bias_property == bias_property) \
+        .filter(metric_properties_j.properties_len == len(ordered_properties))
     for pos, prop_num in enumerate(ordered_properties):
         print(pos, prop_num)
-        properties_id_q = properties_id_q.filter(metric_properties_j.properties['facets'][pos] == prop_num)
+        properties_id_q = properties_id_q.filter(metric_properties_j.properties[pos] == prop_num)
     print(f"Properties query {properties_id_q}")
     # TODO see if using subqueries is faster
     properties_id_subquery = properties_id_q.subquery()
@@ -40,7 +40,7 @@ def get_properties_id(session, ordered_query_params, bias):
 
 
 def get_aggregations_ids(session, ordered_query_params):
-    # aggregations_id is None indicates there's no contraint on the aggregation_id
+    # aggregations_id is None indicates there's no constraint on the aggregation_id
     ordered_aggregations = ordered_query_params.values()
     if all([v == 'all' for v in ordered_aggregations]):
         return None
@@ -48,7 +48,7 @@ def get_aggregations_ids(session, ordered_query_params):
         aggregations_id_q = session.query(metric_aggregations_j.id)
         for pos, agg_val in enumerate(ordered_aggregations):
             if agg_val != 'all':  # hope there is no value called all
-                aggregations_id_q = aggregations_id_q.filter(metric_aggregations_j.properties['facets'][pos] == agg_val)
+                aggregations_id_q = aggregations_id_q.filter(metric_aggregations_j.aggregations[pos] == agg_val)
         print(f"aggregations query {aggregations_id_q}")
         # TODO see if using subqueries is faster
         aggregations_id_subquery = aggregations_id_q.subquery()
