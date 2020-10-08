@@ -12,6 +12,7 @@ humaniki-schema = {editable = true,path = "./../humaniki-schema"}
 mysqlclient = "*"
 pandas = "*"
 pytest = "*"
+sqlalchemy = "*"
 
 [requires]
 python_version = "3.7"

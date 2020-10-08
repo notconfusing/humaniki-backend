@@ -3,7 +3,25 @@ from collections import defaultdict
 from functools import reduce  # forward compatibility for Python 3
 import operator
 
+from humaniki_backend.query import get_exact_fill_id
 from humaniki_schema import utils
+from humaniki_schema.utils import Properties, make_fill_dt, HUMANIKI_SNAPSHOT_DATE_FMT
+
+
+def get_pid_from_str(property_str):
+    return getattr(Properties, property_str.upper()).value
+
+
+def order_query_params(query_params):
+    # first have to match the properties to their to numbers
+    pid_val = {get_pid_from_str(p_str): val for p_str, val in query_params.items()}
+    sorted_pids = sorted(pid_val.keys())
+    sorted_pid_val = {}
+    # In Python 3.7 dictionaries keep insertion order https://stackoverflow.com/a/40007169
+    for pid in sorted_pids:
+        sorted_pid_val[pid] = pid_val[pid]
+    return sorted_pid_val
+
 
 
 def assert_gap_request_valid(snapshot, population, query_params):
@@ -25,7 +43,7 @@ def determine_population_conflict(population, query_params):
     '''
     :param population: as string that matches humaniki_schema.utils PopulationDefinitiion
     :param query_params: the query string parameters
-    :return: (popuatlion_id, was_corrected) tuple
+    :return: (popuatlion_id, population_name, was_corrected) tuple
     '''
     # set population correctly if there is project/population conflict
     # and return population as an id
@@ -33,10 +51,34 @@ def determine_population_conflict(population, query_params):
     was_corrected = False
     if (population == 'all_wikidata') and ('project' in query_params):
         was_corrected = True
-        return utils.PopulationDefinition.GTE_ONE_SITELINK.value, was_corrected
+        pop = utils.PopulationDefinition.GTE_ONE_SITELINK
+        return pop.value, pop.name, was_corrected
     else:
-        return getattr(utils.PopulationDefinition, population.upper()).value, was_corrected
+        pop = getattr(utils.PopulationDefinition, population.upper())
+        return pop.value, pop.name, was_corrected
 
+def determine_fill_id(session, snapshot, latest_fill_id, latest_fill_dt):
+    """
+    figure out the fill id, given a string "latest" or a date in HUMANIKI_SNAPSHOT_DATE_FMT
+    :param snapshot:
+    :param latest_fill_id:
+    :return:
+    """
+    was_corrected = False
+    if snapshot.lower()=='latest':
+        return latest_fill_id, latest_fill_dt, was_corrected
+    else:
+        try:
+            exact_fill_dt = make_fill_dt(snapshot)
+        except ValueError as ve:
+            raise ValueError(f'snapshot needs to be in {HUMANIKI_SNAPSHOT_DATE_FMT}, not {ve}')
+        fill_id, fill_date = get_exact_fill_id(session, exact_fill_dt)
+        if fill_id:
+            return fill_id, fill_date, was_corrected
+        else:
+            raise NotImplementedError(f'There is no snapshot exactly matching {snapshot} and closes-snapshots arent yet implemented')
+            # was_corrected = True
+            #return corrected_fill_id, corrected_fill_date, was_corrected
 
 def build_layer_default_dict(n):
     """
