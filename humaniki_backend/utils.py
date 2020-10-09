@@ -122,11 +122,12 @@ def build_gap_response(metrics_res):
     number_of_aggregations = len(first_res_third_sql_alchemy_obj.aggregations)
     print(f"number_of_aggregations:{number_of_aggregations}")
     resp_dict = build_layer_default_dict(number_of_aggregations)
-    for metric_obj, properties_obj, aggregation_obj in metrics_res:
+    for metric_obj, properties_obj, aggregation_obj, bias_label in metrics_res:
         # if aggregation_obj.aggregations['facets'][0]=='enwiki':
         #     print(f'aggregations are;{aggregation_obj.aggregations}')
         resp_dict_path = []
         resp_dict_path.extend(aggregation_obj.aggregations)
-        resp_dict_path.append(metric_obj.bias_value)
+        # resp_dict_path.append(metric_obj.bias_value)
+        resp_dict_path.append(bias_label)
         set_dict_path(resp_dict, resp_dict_path, metric_obj.total)
     return resp_dict

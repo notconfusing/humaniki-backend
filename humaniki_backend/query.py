@@ -1,4 +1,4 @@
-from humaniki_schema.schema import metric, metric_aggregations_j, metric_properties_j, fill
+from humaniki_schema.schema import metric, metric_aggregations_j, metric_properties_j, fill, label
 
 from sqlalchemy import func
 
@@ -39,14 +39,16 @@ def get_aggregations_ids(session, ordered_query_params):
         return aggregations_id
 
 
-def get_metrics(session, fill_id, population_id, properties_id, aggregations_id, use_lang='en'):
+def get_metrics(session, fill_id, population_id, properties_id, aggregations_id, label_lang='en'):
     # get the properties ID based on the properties or return Error.
-    metrics_q = session.query(metric, metric_properties_j, metric_aggregations_j) \
+    metrics_q = session.query(metric, metric_properties_j, metric_aggregations_j, label.label) \
         .join(metric_properties_j, metric.properties_id == metric_properties_j.id) \
-        .join(metric_aggregations_j, metric.aggregations_id == metric_aggregations_j.id) \
+        .join(metric_aggregations_j, metric.aggregations_id == metric_aggregations_j.id)\
+        .outerjoin(label, metric.bias_value==label.qid)\
         .filter(metric.properties_id == properties_id) \
         .filter(metric.fill_id == fill_id) \
         .filter(metric.population_id == population_id) \
+        .filter(label.lang==label_lang) \
         .order_by(metric.aggregations_id)
     if isinstance(aggregations_id, int):
         metrics_q = metrics_q.filter(metric.aggregations_id == aggregations_id)

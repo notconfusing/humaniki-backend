@@ -34,6 +34,7 @@ def gap(bias, snapshot, population):
     # handle snapshot
     requested_fill_id, requested_fill_date, snapshot_corrected = determine_fill_id(session, snapshot, latest_fill_id,
                                                                                    latest_fill_date)
+    # print(f"Fills {requested_fill_id} {requested_fill_date}")
     if snapshot_corrected:
         return_warnings['snapshot_corrected to'] = requested_fill_id
     # handle populations
@@ -59,7 +60,7 @@ def gap(bias, snapshot, population):
                               properties_id=properties_id,
                               aggregations_id=aggregations_id)
     except ValueError as ve:
-        errors['aggregations_id'] = str(ve)
+        errors['mterics'] = str(ve)
     # convert table rows to jsonable dict
     metric_response = build_gap_response(metrics)
     full_response = {str(requested_fill_date): {population_name: metric_response}}
