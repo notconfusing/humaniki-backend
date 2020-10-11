@@ -1,6 +1,8 @@
 from flask import Flask, abort, jsonify, request
 
 from humaniki_schema.db import session_factory
+from flask_cors import CORS
+
 from flask_sqlalchemy_session import flask_scoped_session
 
 from humaniki_backend.query import get_properties_id, get_aggregations_ids, get_metrics, get_latest_fill_id, \
@@ -10,6 +12,7 @@ from humaniki_backend.utils import determine_population_conflict, assert_gap_req
 from humaniki_schema.utils import Properties, make_fill_dt
 
 app = Flask(__name__)
+CORS(app)
 session = flask_scoped_session(session_factory, app)
 
 # Note this requires updating or the process restarting after a new fill.
