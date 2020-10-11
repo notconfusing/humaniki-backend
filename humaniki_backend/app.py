@@ -3,8 +3,9 @@ from flask import Flask, abort, jsonify, request
 from humaniki_schema.db import session_factory
 from flask_sqlalchemy_session import flask_scoped_session
 
-from humaniki_backend.query import get_properties_id, get_aggregations_ids, get_metrics, get_latest_fill_id
-from humaniki_backend.utils import determine_population_conflict, build_gap_response, assert_gap_request_valid, \
+from humaniki_backend.query import get_properties_id, get_aggregations_ids, get_metrics, get_latest_fill_id, \
+    build_gap_response, build_metrics
+from humaniki_backend.utils import determine_population_conflict, assert_gap_request_valid, \
     order_query_params, get_pid_from_str, determine_fill_id
 from humaniki_schema.utils import Properties, make_fill_dt
 
@@ -56,14 +57,13 @@ def gap(bias, snapshot, population):
         errors['aggregations_id'] = str(ve)
     # get metric
     try:
-        metrics = get_metrics(session, fill_id=requested_fill_id, population_id=population_id,
-                              properties_id=properties_id,
-                              aggregations_id=aggregations_id)
+        metrics = build_metrics(session, fill_id=requested_fill_id, population_id=population_id,
+                                properties_id=properties_id,
+                                aggregations_id=aggregations_id)
     except ValueError as ve:
-        errors['mterics'] = str(ve)
+        errors['metrics'] = str(ve)
     # convert table rows to jsonable dict
-    metric_response = build_gap_response(metrics)
-    full_response = {str(requested_fill_date): {population_name: metric_response}}
+    full_response = {str(requested_fill_date): {population_name: metrics}}
     return jsonify(**full_response)
 
 

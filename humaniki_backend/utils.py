@@ -1,7 +1,4 @@
 from datetime import datetime
-from collections import defaultdict
-from functools import reduce  # forward compatibility for Python 3
-import operator
 
 from humaniki_backend.query import get_exact_fill_id
 from humaniki_schema import utils
@@ -80,54 +77,3 @@ def determine_fill_id(session, snapshot, latest_fill_id, latest_fill_dt):
             # was_corrected = True
             #return corrected_fill_id, corrected_fill_date, was_corrected
 
-def build_layer_default_dict(n):
-    """
-    Build an n-level defaultdict    not sure if this is clever or unnecessary brain surgery, i'll never undestand again
-    :param n: levels
-    :return: a very-defaultdict
-    """
-    ret = defaultdict(dict)
-    for layer in range(1, n):
-        ret = defaultdict(lambda: ret)
-    return ret
-
-
-def get_dict_path(dct, key_path):
-    '''
-    :param dct: an n-nested dict of dicts
-    :param key_path: a list of keys
-    :return:
-    '''
-    return reduce(operator.getitem, key_path, dct)
-
-
-def set_dict_path(dct, key_path, value):
-    """
-    :param dct:  an n-nested dict of dicts
-    :param key_path: a list of keys
-    :param value: a value to set a path location
-    :return:
-    """
-    get_dict_path(dct, key_path[:-1])[key_path[-1]] = value
-
-
-def build_gap_response(metrics_res):
-    """
-    transforms a metrics response into a json-able serialization
-    :param metrics:
-    :return: response dict
-    """
-    # TODO need to exclude the bias-values from the aggregations
-    first_res_third_sql_alchemy_obj = metrics_res[0][2]
-    number_of_aggregations = len(first_res_third_sql_alchemy_obj.aggregations)
-    print(f"number_of_aggregations:{number_of_aggregations}")
-    resp_dict = build_layer_default_dict(number_of_aggregations)
-    for metric_obj, properties_obj, aggregation_obj, bias_label in metrics_res:
-        # if aggregation_obj.aggregations['facets'][0]=='enwiki':
-        #     print(f'aggregations are;{aggregation_obj.aggregations}')
-        resp_dict_path = []
-        resp_dict_path.extend(aggregation_obj.aggregations)
-        # resp_dict_path.append(metric_obj.bias_value)
-        resp_dict_path.append(bias_label)
-        set_dict_path(resp_dict, resp_dict_path, metric_obj.total)
-    return resp_dict
