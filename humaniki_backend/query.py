@@ -16,10 +16,7 @@ def get_properties_id(session, ordered_query_params, bias_property):
         .filter(metric_properties_j.bias_property == bias_property) \
         .filter(metric_properties_j.properties_len == len(ordered_properties))
     for pos, prop_num in enumerate(ordered_properties):
-        print(pos, prop_num)
         properties_id_q = properties_id_q.filter(metric_properties_j.properties[pos] == prop_num)
-    # print(f"Properties query {properties_id_q}")
-    # TODO see if using subqueries is faster
     # properties_id_subquery = properties_id_q.subquery()
     properties_id_obj = properties_id_q.one()
     properties_id_int = properties_id_obj.id
