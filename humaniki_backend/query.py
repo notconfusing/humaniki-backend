@@ -4,7 +4,7 @@ from functools import reduce
 
 from sqlalchemy.orm import aliased
 
-from humaniki_schema.schema import metric, metric_aggregations_j, metric_properties_j, fill, label, project
+from humaniki_schema.schema import metric, metric_aggregations_j, metric_properties_j, fill, label, project, label_misc
 
 from sqlalchemy import func
 
@@ -20,7 +20,7 @@ def get_properties_id(session, ordered_query_params, bias_property):
         properties_id_q = properties_id_q.filter(metric_properties_j.properties[pos] == prop_num)
     # print(f"Properties query {properties_id_q}")
     # TODO see if using subqueries is faster
-    properties_id_subquery = properties_id_q.subquery()
+    # properties_id_subquery = properties_id_q.subquery()
     properties_id_obj = properties_id_q.one()
     properties_id_int = properties_id_obj.id
     # print(f"Properties id is: {properties_id_int}")
@@ -45,10 +45,55 @@ def get_aggregations_ids(session, ordered_query_params):
         return aggregations_id
 
 
-def build_metrics(session, fill_id, population_id, properties_id, aggregations_id, label_lang='en'):
+def build_metrics(session, fill_id, population_id, properties_id, aggregations_id, label_lang):
     metrics, metrics_columns = get_metrics(session, fill_id, population_id, properties_id, aggregations_id, label_lang)
-    metrics_response = build_gap_response(properties_id, metrics, metrics_columns)
+    metrics_response = build_gap_response(properties_id, metrics, metrics_columns, label_lang)
     return metrics_response
+
+
+def generate_json_expansion_values(properties):
+    property_query_cols = []
+    aliased_joins = []
+    for prop_i, prop in enumerate(properties):
+        prop_col = func.json_extract(metric_properties_j.properties, f"$[{prop_i}]").label(f"prop_{prop_i}")
+        agg_col = func.json_unquote(func.json_extract(metric_aggregations_j.aggregations, f"$[{prop_i}]")).label(
+            f"agg_{prop_i}")
+        property_query_cols.append(prop_col)
+        property_query_cols.append(agg_col)
+
+        # TODO choose specific label tables
+        label_table = None
+        if prop == 0:  # recall we are faking sitelinks as property 0
+            label_table = label_misc
+            join_key = 'src'
+        else:
+            label_table = label
+            join_key = 'qid'
+        aliased_label = aliased(label_table, name=f"label_{prop_i}")
+        join_data = {'label_table':aliased_label, 'join_key':join_key}
+        aliased_joins.append(join_data)
+    return property_query_cols, aliased_joins
+
+
+def label_metric_query(session, metrics_subq, aliased_joins, label_lang):
+    aliased_label_cols = [aj['label_table'].label.label(f'agg_label_{i}') for i, aj in enumerate(aliased_joins)]
+
+    # first there will always be the bias_value to label
+    labelled_q = session.query(metrics_subq, label.label.label('bias_label'), *aliased_label_cols) \
+        .outerjoin(label,
+                   label.qid == metrics_subq.c.bias_value) \
+        .filter(label.lang == label_lang) \
+    # then there are the aggregation values to join on.
+    for j, aliased_join in enumerate(aliased_joins):
+        label_join_table = aliased_join['label_table']
+        label_join_key = aliased_join['join_key']
+        label_join_column = getattr(label_join_table, label_join_key)
+        metrics_subq_join_col = getattr(metrics_subq.c, f'agg_{j}')
+        labelled_q = labelled_q\
+        .outerjoin(label_join_table, label_join_column == metrics_subq_join_col)\
+        .filter(label_join_table.lang == label_lang)
+
+    return labelled_q
 
 def get_metrics(session, fill_id, population_id, properties_id, aggregations_id, label_lang):
     """
@@ -63,30 +108,9 @@ def get_metrics(session, fill_id, population_id, properties_id, aggregations_id,
     """
     prop_id = properties_id.id
     properties = properties_id.properties
+    property_query_cols, aliased_joins = generate_json_expansion_values(properties)
 
-    property_query_cols = []
-    aggregation_query_cols = []
-    aliased_labels = []
-    aliased_join_keys = []
-    for prop_i, prop in enumerate(properties):
-        prop_col = func.json_extract(metric_properties_j.properties, f"$[{prop_i}]").label(f"prop_{prop_i}")
-        agg_col = func.json_unquote(func.json_extract(metric_aggregations_j.aggregations, f"$[{prop_i}]")).label(f"agg_{prop_i}")
-        property_query_cols.append(prop_col)
-        property_query_cols.append(agg_col)
-
-        # TODO choose specific label tables
-        label_table = None
-        if prop == 0:  # recall we are faking sitelinks as property 0
-            label_table = project
-            join_key = 'code'
-        else:
-            label_table = label
-            join_key = 'qid'
-        aliased_label = aliased(label_table, name=f"label_{prop_i}")
-        aliased_labels.append(aliased_label)
-        aliased_join_keys.append(join_key)
-
-    query_cols = [*property_query_cols, *aggregation_query_cols, metric.bias_value, metric.total]
+    query_cols = [*property_query_cols, metric.bias_value, metric.total]
 
     metrics_q = session.query(*query_cols) \
         .join(metric_properties_j, metric.properties_id == metric_properties_j.id) \
@@ -97,44 +121,39 @@ def get_metrics(session, fill_id, population_id, properties_id, aggregations_id,
         .order_by(metric.aggregations_id)
     if isinstance(aggregations_id, int):
         metrics_q = metrics_q.filter(metric.aggregations_id == aggregations_id)
-    metrics_subq = metrics_q.subquery()
+    if isinstance(aggregations_id, list):
+        metrics_q = metrics_q.filter(metric.aggregations_id.in_(aggregations_id))
 
-    aliased_label_cols = [al.label.label(f'agg_label_{i}') for i, al in enumerate(aliased_labels)]
-    labelled_query_cols = [*aliased_label_cols, metric.bias_value, metric.total]
-    labelled_q = session.query(metrics_subq, label.label.label('bias_label'),  *aliased_label_cols) \
-        .outerjoin(aliased_labels[0],
-                   getattr(aliased_labels[0], aliased_join_keys[0]) == metrics_subq.c.agg_0)\
-        .outerjoin(label,
-                   label.qid==metrics_subq.c.bias_value)\
-        .filter(label.lang==label_lang)
+    if label_lang is not None:
+        metrics_subq = metrics_q.subquery('metrics_driver')
+        metrics_q = label_metric_query(session, metrics_subq, aliased_joins, label_lang)
 
-    print(f'metrics_q is {labelled_q}')
-
-    metrics = labelled_q.all()
-    metrics_columns = labelled_q.column_descriptions
-    # metrics = metrics_q.all()
+    print(f'metrics_q is {metrics_q}')
+    metrics = metrics_q.all()
+    metrics_columns = metrics_q.column_descriptions
     print(f'Number of metrics to return are {len(metrics)}')
     return metrics, metrics_columns
 
 
-def build_gap_response(properties_id, metrics_res, columns):
+def build_gap_response(properties_id, metrics_res, columns, label_lang):
     """
     transforms a metrics response into a json-able serialization
+    :param label_lang:
     :param metrics:
     :return: response dict
     """
-    # TODO need to exclude the bias-values from the aggregations
     number_of_aggregations = len(properties_id.properties)
     print(f"number_of_aggregations:{number_of_aggregations}")
     resp_dict = build_layer_default_dict(number_of_aggregations)
-    agg_cols = [col['name'] for col in columns if col['name'].startswith('agg_label')]
+    bias_col_name = 'bias_label' if label_lang else 'bias_value'
+    agg_col_prefix = 'agg_label' if label_lang else 'agg'
+    agg_cols = [col['name'] for col in columns if col['name'].startswith(agg_col_prefix)]
     for row in metrics_res:
         resp_dict_path = []
         ## get the aggregation_values
         agg_vals = [getattr(row, agg_col) for agg_col in agg_cols]
-        ##
         resp_dict_path.extend(agg_vals)
-        resp_dict_path.append(row.bias_label)
+        resp_dict_path.append(getattr(row, bias_col_name))
         set_dict_path(resp_dict, resp_dict_path, row.total)
     return resp_dict
 

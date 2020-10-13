@@ -6,19 +6,31 @@ from humaniki_schema.utils import Properties, make_fill_dt, HUMANIKI_SNAPSHOT_DA
 
 
 def get_pid_from_str(property_str):
-    return getattr(Properties, property_str.upper()).value
+    try:
+        internal_prop_val = getattr(Properties, property_str.upper()).value
+        return internal_prop_val
+    except AttributeError:
+        return None
 
 
 def order_query_params(query_params):
     # first have to match the properties to their to numbers
-    pid_val = {get_pid_from_str(p_str): val for p_str, val in query_params.items()}
+    pid_val = {}
+    non_orderable_params = {}
+    for p_str, val in query_params.items():
+        property = get_pid_from_str(p_str)
+        if isinstance(property, int):
+            pid_val[property] = val
+        else:
+            non_orderable_params[p_str] = val
+
+    # pid_val = {get_pid_from_str(p_str): val for p_str, val in query_params.items() if get_pid_from_str(p_str)}
     sorted_pids = sorted(pid_val.keys())
     sorted_pid_val = {}
     # In Python 3.7 dictionaries keep insertion order https://stackoverflow.com/a/40007169
     for pid in sorted_pids:
         sorted_pid_val[pid] = pid_val[pid]
-    return sorted_pid_val
-
+    return sorted_pid_val, non_orderable_params
 
 
 def assert_gap_request_valid(snapshot, population, query_params):
@@ -33,6 +45,7 @@ def assert_gap_request_valid(snapshot, population, query_params):
     # assert that the query-keys are all in
     # - ['country', 'year_of_birth_start', 'year_of_birth_end',
     #     'occupation', 'project']
+    # assert that label_lang is valid
     return True
 
 

@@ -46,7 +46,7 @@ def gap(bias, snapshot, population):
     if population_corrected:
         return_warnings['population_corrected to'] = population_name
     # order query params by property pid
-    ordered_query_params = order_query_params(query_params)
+    ordered_query_params, non_orderable_query_params = order_query_params(query_params)
     # get properties-id
     try:
         bias_property = get_pid_from_str(bias)
@@ -60,9 +60,11 @@ def gap(bias, snapshot, population):
         errors['aggregations_id'] = str(ve)
     # get metric
     try:
+        label_lang = non_orderable_query_params['label_lang'] if 'label_lang' in non_orderable_query_params else None
         metrics = build_metrics(session, fill_id=requested_fill_id, population_id=population_id,
                                 properties_id=properties_id,
-                                aggregations_id=aggregations_id)
+                                aggregations_id=aggregations_id,
+                                label_lang=label_lang)
     except ValueError as ve:
         errors['metrics'] = str(ve)
     # convert table rows to jsonable dict
