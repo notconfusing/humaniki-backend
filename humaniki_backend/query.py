@@ -46,14 +46,26 @@ def get_aggregations_ids(session, ordered_query_params):
 
 
 def build_metrics(session, fill_id, population_id, properties_id, aggregations_id, label_lang):
+    """
+    the entry point for building metrics, first querys the database for the metrics in question
+    secondly, builds the nested-dict response.
+    :param session:
+    :param fill_id:
+    :param population_id:
+    :param properties_id:
+    :param aggregations_id:
+    :param label_lang:
+    :return:
+    """
+    # query the metrics table
     metrics, metrics_columns = get_metrics(session, fill_id, population_id, properties_id, aggregations_id, label_lang)
+    # make a nested dictionary represented the metrics
     metrics_response = build_gap_response(properties_id, metrics, metrics_columns, label_lang)
     return metrics_response
 
 
 def generate_json_expansion_values(properties):
     property_query_cols = []
-    aliased_joins = []
     for prop_i, prop in enumerate(properties):
         prop_col = func.json_extract(metric_properties_j.properties, f"$[{prop_i}]").label(f"prop_{prop_i}")
         agg_col = func.json_unquote(func.json_extract(metric_aggregations_j.aggregations, f"$[{prop_i}]")).label(
@@ -61,8 +73,22 @@ def generate_json_expansion_values(properties):
         property_query_cols.append(prop_col)
         property_query_cols.append(agg_col)
 
-        # TODO choose specific label tables
-        label_table = None
+    return property_query_cols
+
+
+def generate_aliased_tables_for_labelling(properties):
+    """
+    generate a list of dicts defining how to join an aggregation column
+    the details needed are the join table and the join_key like
+    [{table:label_misc as 'label_0', join_key:'src'}
+            ...
+                        {{table:label as 'label_n', join_key:'qid'}}]
+    note that the table the join table and key are dependent on the property
+    :param properties:
+    :return:
+    """
+    aliased_joins = []
+    for prop_i, prop in enumerate(properties):
         if prop == 0:  # recall we are faking sitelinks as property 0
             label_table = label_misc
             join_key = 'src'
@@ -70,34 +96,68 @@ def generate_json_expansion_values(properties):
             label_table = label
             join_key = 'qid'
         aliased_label = aliased(label_table, name=f"label_{prop_i}")
-        join_data = {'label_table':aliased_label, 'join_key':join_key}
+        join_data = {'label_table': aliased_label, 'join_key': join_key}
         aliased_joins.append(join_data)
-    return property_query_cols, aliased_joins
+    return aliased_joins
 
 
-def label_metric_query(session, metrics_subq, aliased_joins, label_lang):
+def label_metric_query(session, metrics_subq, properties, label_lang):
+    """
+     So we have the metrics table, exploded into one aggregation per column, but need to join the labels
+     we create an alias of the label table per aggregation, and then join
+     note that sitelinks must be joined on label_misc.src and
+               qids      must be joined on label.qid
+
+    :return: a sqlalchemy query
+    """
+    # i wish i could compute the alias joins inline in this function rather than upfront, but
+    # I believe I need the column names before I can start joining.
+    aliased_joins = generate_aliased_tables_for_labelling(properties)
     aliased_label_cols = [aj['label_table'].label.label(f'agg_label_{i}') for i, aj in enumerate(aliased_joins)]
 
+    label_query_cols = [metrics_subq, label.label.label('bias_label'), *aliased_label_cols]
     # first there will always be the bias_value to label
-    labelled_q = session.query(metrics_subq, label.label.label('bias_label'), *aliased_label_cols) \
+    labelled_q = session.query(*label_query_cols) \
         .outerjoin(label,
                    label.qid == metrics_subq.c.bias_value) \
-        .filter(label.lang == label_lang) \
-    # then there are the aggregation values to join on.
+        .filter(label.lang == label_lang)
+
+    # then there are the aggregation values to label.
     for j, aliased_join in enumerate(aliased_joins):
+        # the left key from the unlabelled metric
+        metrics_subq_join_col = getattr(metrics_subq.c, f'agg_{j}')
+        # define the right key
         label_join_table = aliased_join['label_table']
         label_join_key = aliased_join['join_key']
         label_join_column = getattr(label_join_table, label_join_key)
-        metrics_subq_join_col = getattr(metrics_subq.c, f'agg_{j}')
-        labelled_q = labelled_q\
-        .outerjoin(label_join_table, label_join_column == metrics_subq_join_col)\
-        .filter(label_join_table.lang == label_lang)
+
+        #  make a left join to make sure no metrics are being dropped
+        # and also the join table needs to be subsetted to the correct langauge
+        labelled_q = labelled_q \
+            .outerjoin(label_join_table, label_join_column == metrics_subq_join_col) \
+            .filter(label_join_table.lang == label_lang)
 
     return labelled_q
+
 
 def get_metrics(session, fill_id, population_id, properties_id, aggregations_id, label_lang):
     """
     get the metrics based on population and properties, and optionally the aggregations
+
+    Expands the metrics row from json aggregations.aggregations list
+     --> from
+    fill_id | population | [prop_0,..prop_n] | [agg_val_0,  .., agg_val_n] | gender | total
+    ---> to
+    fill_id | population | prop_0 |...| prop_n |agg_val_0 | ... |agg_val_n] | gender | total
+
+    This can be done by writing a dynamics query, based on the fact that we know how many properties
+    are being queried by the api user. For instance.
+    The reason this transform is necessary here is to facilitate labelling the aggregation values
+    using sql joins. That is also tricky because some aggegration values are site-links, and some are
+    qids.
+
+    This jiujitsu may be deprecated if we store the aggregations noramlized rather than as json list.
+    The problem I was having there was the hetergenous types of the aggregations (sitelinks, str) (qids, int)
     :param session:
     :param fill_id:
     :param population_id:
@@ -108,7 +168,7 @@ def get_metrics(session, fill_id, population_id, properties_id, aggregations_id,
     """
     prop_id = properties_id.id
     properties = properties_id.properties
-    property_query_cols, aliased_joins = generate_json_expansion_values(properties)
+    property_query_cols = generate_json_expansion_values(properties)
 
     query_cols = [*property_query_cols, metric.bias_value, metric.total]
 
@@ -124,9 +184,10 @@ def get_metrics(session, fill_id, population_id, properties_id, aggregations_id,
     if isinstance(aggregations_id, list):
         metrics_q = metrics_q.filter(metric.aggregations_id.in_(aggregations_id))
 
+    # if a label_lang is defined we need to make a subquery
     if label_lang is not None:
         metrics_subq = metrics_q.subquery('metrics_driver')
-        metrics_q = label_metric_query(session, metrics_subq, aliased_joins, label_lang)
+        metrics_q = label_metric_query(session, metrics_subq, properties, label_lang)
 
     print(f'metrics_q is {metrics_q}')
     metrics = metrics_q.all()
@@ -138,6 +199,12 @@ def get_metrics(session, fill_id, population_id, properties_id, aggregations_id,
 def build_gap_response(properties_id, metrics_res, columns, label_lang):
     """
     transforms a metrics response into a json-able serialization
+    like {agg_val_0:
+            {agg_val_1:
+                    ...
+                    {agg_val_n:
+                        {gender_1:total_1,
+                         gender_2:total_2}}}
     :param label_lang:
     :param metrics:
     :return: response dict
