@@ -5,10 +5,11 @@ from flask_cors import CORS
 
 from flask_sqlalchemy_session import flask_scoped_session
 
-from humaniki_backend.query import get_properties_id, get_aggregations_ids, get_metrics, get_latest_fill_id, \
+from humaniki_backend.query import get_aggregations_ids, get_metrics, get_latest_fill_id, \
     build_gap_response, build_metrics
 from humaniki_backend.utils import determine_population_conflict, assert_gap_request_valid, \
     order_query_params, get_pid_from_str, determine_fill_id
+from humaniki_schema.queries import get_properties_obj
 from humaniki_schema.utils import Properties, make_fill_dt
 
 app = Flask(__name__)
@@ -50,7 +51,9 @@ def gap(bias, snapshot, population):
     # get properties-id
     try:
         bias_property = get_pid_from_str(bias)
-        properties_id = get_properties_id(session, ordered_query_params, bias_property=bias_property)
+        ordered_properties = ordered_query_params.keys()
+        properties_id = get_properties_obj(session=session, dimension_properties=ordered_properties, bias_property=bias_property)
+        # properties_id = get_properties_id(session, ordered_properties, bias_property=bias_property)
     except ValueError as ve:
         errors['properties_id'] = str(ve)
     # get aggregations-id

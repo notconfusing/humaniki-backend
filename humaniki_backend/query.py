@@ -4,43 +4,21 @@ from functools import reduce
 
 from sqlalchemy.orm import aliased
 
+from humaniki_schema.queries import get_aggregations_obj
 from humaniki_schema.schema import metric, metric_aggregations_j, metric_properties_j, fill, label, project, label_misc
 
 from sqlalchemy import func
 
 
-def get_properties_id(session, ordered_query_params, bias_property):
-    # get the properties ID based on the properties or return Error
-    ordered_properties = ordered_query_params.keys()
-    properties_id_q = session.query(metric_properties_j.id, metric_properties_j.properties) \
-        .filter(metric_properties_j.bias_property == bias_property) \
-        .filter(metric_properties_j.properties_len == len(ordered_properties))
-    for pos, prop_num in enumerate(ordered_properties):
-        properties_id_q = properties_id_q.filter(metric_properties_j.properties[pos] == prop_num)
-    # properties_id_subquery = properties_id_q.subquery()
-    properties_id_obj = properties_id_q.one()
-    properties_id_int = properties_id_obj.id
-    # print(f"Properties id is: {properties_id_int}")
-    return properties_id_obj
-
-
-def get_aggregations_ids(session, ordered_query_params):
+def get_aggregations_ids(session, ordered_aggregations):
     # aggregations_id is None indicates there's no constraint on the aggregation_id
-    ordered_aggregations = ordered_query_params.values()
     if all([v == 'all' for v in ordered_aggregations]):
         return None
     else:
-        aggregations_id_q = session.query(metric_aggregations_j.id)
-        for pos, agg_val in enumerate(ordered_aggregations):
-            if agg_val != 'all':  # hope there is no value called all
-                aggregations_id_q = aggregations_id_q.filter(metric_aggregations_j.aggregations[pos] == agg_val)
-        print(f"aggregations query {aggregations_id_q}")
-        # TODO see if using subqueries is faster
-        aggregations_id_subquery = aggregations_id_q.subquery()
-        aggregations_id = aggregations_id_q.all()
-        print(f"aggregations_id is: {aggregations_id}")
-        return aggregations_id
-
+        aggregation_objs = get_aggregations_obj(bias_value=None, dimension_values=ordered_aggregations,
+                             session=session, as_subquery=False, create_if_no_exist=False)
+        aggregations_ids = [a.id for a in aggregation_objs]
+        return aggregations_ids
 
 def build_metrics(session, fill_id, population_id, properties_id, aggregations_id, label_lang):
     """
@@ -186,7 +164,7 @@ def get_metrics(session, fill_id, population_id, properties_id, aggregations_id,
         metrics_subq = metrics_q.subquery('metrics_driver')
         metrics_q = label_metric_query(session, metrics_subq, properties, label_lang)
 
-    print(f'metrics_q is {metrics_q}')
+    # print(f'metrics_q is {metrics_q}')
     metrics = metrics_q.all()
     metrics_columns = metrics_q.column_descriptions
     print(f'Number of metrics to return are {len(metrics)}')
@@ -207,7 +185,7 @@ def build_gap_response(properties_id, metrics_res, columns, label_lang):
     :return: response dict
     """
     number_of_aggregations = len(properties_id.properties)
-    print(f"number_of_aggregations:{number_of_aggregations}")
+    # print(f"number_of_aggregations:{number_of_aggregations}")
     resp_dict = build_layer_default_dict(number_of_aggregations)
     bias_col_name = 'bias_label' if label_lang else 'bias_value'
     agg_col_prefix = 'agg_label' if label_lang else 'agg'
