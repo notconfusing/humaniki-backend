@@ -1,1 +1,1 @@
-{"2018-01-01":{"GTE_ONE_SITELINK":{"_fake_french_English Wikipedia":{"masculin":10}}}}
+{"meta":{"aggregation_properties":["PROJECT"],"bias":"gender","bias_property":21,"label_lang":"fr","population":"GTE_ONE_SITELINK","population_corrected":true,"snapshot":"2018-01-01"},"metrics":[{"item":{"project":"enwiki"},"item_label":{"project":"_fake_french_English Wikipedia"},"labels":{"6581097":"masculin"},"order":0,"values":{"6581097":10}}]}

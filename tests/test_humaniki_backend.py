@@ -1,24 +1,33 @@
 import json
 import os
-import tempfile
+import time
 
 import pytest
+from sqlalchemy import func
 
-from humaniki_schema import generate_example_data
+from humaniki_schema import generate_example_data, db
 from humaniki_backend import app
+from humaniki_schema.schema import metric
+from humaniki_schema.utils import read_config_file
 
+config = read_config_file(os.environ['HUMANIKI_YAML_CONFIG'], __file__)
 
-skip_generation = os.getenv('HUMANIKI_TEST_SKIPGEN', False)
+# TODO. If you generate the data seperately and then run the tests they pass. But if you ask the data
+# to be generated here, sometimes there are no metrics created, despite, metrics count showing nonzero.
+# a mystery.
+skip_generation = config['test']['skip_gen'] if 'skip_gen' in config['test'] else False
 if not skip_generation:
-    generate_example_data.generate_all(data_dir=os.getenv('HUMANIKI_EXMAPLE_DATADIR'),
-                                       example_len=10,
-                                       num_fills=1)
-
+    generated = generate_example_data.generate_all(config=config)
+    print(f'generated: {generated}')
+    session = db.session_factory()
+    metrics_count = session.query(func.count(metric.fill_id)).scalar()
+    print(f'number of metrics: {metrics_count}')
+    assert metrics_count>0
 
 @pytest.fixture
 def test_jsons():
     test_files = {}
-    test_datadir = os.environ["HUMANIKI_TEST_DATADIR"]
+    test_datadir = config['test']['test_datadir']
     files = os.listdir(test_datadir)
     json_fs = [f for f in files if f.endswith('.json')]
     for json_f in json_fs:
@@ -29,7 +38,6 @@ def test_jsons():
 @pytest.fixture
 def client():
     app.app.config['TESTING'] = True
-
     with app.app.test_client() as client:
         with app.app.app_context():
             yield client
@@ -45,34 +53,31 @@ def test_by_language_all(client, test_jsons):
     resp = rv.get_json()
     resp_snap_key = list(resp.keys())[0]
     expected_json = test_jsons['properties_all.json']
-    expected_snap_key = list(expected_json.keys())[0]
-    population_key = 'GTE_ONE_SITELINK'
-    actual_data = resp[resp_snap_key][population_key]
-    expected_data = expected_json[expected_snap_key][population_key]
+    assert expected_json['meta']['population'] == 'GTE_ONE_SITELINK'
+    assert expected_json['meta']['population_corrected'] == True
+    actual_data = resp['metrics']
+    expected_data = expected_json['metrics']
     assert len(actual_data) == len(expected_data)
 
 def test_by_language_enwiki_en(client, test_jsons):
     rv = client.get('/v1/gender/gap/latest/all_wikidata/properties?project=enwiki&label_lang=en')
     resp = rv.get_json()
-    resp_snap_key = list(resp.keys())[0]
     expected_json = test_jsons['properties_enwiki_en.json']
-    expected_snap_key = list(expected_json.keys())[0]
-    population_key = 'GTE_ONE_SITELINK'
-    actual_data = resp[resp_snap_key][population_key]
-    expected_data = expected_json[expected_snap_key][population_key]
+    actual_data = resp['metrics']
+    expected_data = expected_json['metrics']
     assert len(actual_data) == len(expected_data)
-    assert 'English Wikipedia' in actual_data
+    the_only_item = actual_data[0]
+    assert the_only_item['item_label']['project'] == 'English Wikipedia'
+    assert the_only_item['values']['6581097']==10
+
 
 def test_by_language_enwiki_fr(client, test_jsons):
     rv = client.get('/v1/gender/gap/latest/all_wikidata/properties?project=enwiki&label_lang=fr')
     resp = rv.get_json()
-    resp_snap_key = list(resp.keys())[0]
     expected_json = test_jsons['properties_enwiki_fr.json']
-    expected_snap_key = list(expected_json.keys())[0]
-    population_key = 'GTE_ONE_SITELINK'
-    actual_data = resp[resp_snap_key][population_key]
-    expected_data = expected_json[expected_snap_key][population_key]
-    actual_data_first_item_key = list(actual_data.keys())[0]
+    actual_data = resp['metrics']
+    expected_data = expected_json['metrics']
     assert len(actual_data) == len(expected_data)
-    assert 'masculin' in actual_data[actual_data_first_item_key]
-    assert actual_data[actual_data_first_item_key]['masculin'] == 10
+    the_only_item = actual_data[0]
+    assert 'masculin' in the_only_item['labels'].values()
+    assert resp['meta']['label_lang'] == 'fr'

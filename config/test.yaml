@@ -1,0 +1,9 @@
+generation:
+  example:
+    datadir: /home/paprika/workspace/humaniki-schema/humaniki_schema/example_data
+    len: 10
+    fills: 1
+test:
+  test_datadir: /home/paprika/workspace/humaniki-backend/tests/test_data
+  skip_gen: True
+#  skip_gen: False

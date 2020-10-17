@@ -6,7 +6,7 @@ from flask_cors import CORS
 from flask_sqlalchemy_session import flask_scoped_session
 
 from humaniki_backend.query import get_aggregations_ids, get_metrics, get_latest_fill_id, \
-    build_gap_response, build_metrics
+    build_gap_response, build_metrics, get_metrics_count
 from humaniki_backend.utils import determine_population_conflict, assert_gap_request_valid, \
     order_query_params, get_pid_from_str, determine_fill_id
 from humaniki_schema.queries import get_properties_obj
@@ -18,6 +18,7 @@ session = flask_scoped_session(session_factory, app)
 
 # Note this requires updating or the process restarting after a new fill.
 latest_fill_id, latest_fill_date = get_latest_fill_id(session)
+app.latest_fill_id = latest_fill_id
 
 
 @app.route("/")
@@ -27,6 +28,7 @@ def home():
 
 @app.route("/v1/<string:bias>/gap/<string:snapshot>/<string:population>/properties")
 def gap(bias, snapshot, population):
+    latest_fill_id, latest_fill_date = get_latest_fill_id(session)
     return_warnings = {}
     errors = {}
     query_params = request.values
@@ -52,7 +54,8 @@ def gap(bias, snapshot, population):
     try:
         bias_property = get_pid_from_str(bias)
         ordered_properties = ordered_query_params.keys()
-        properties_id = get_properties_obj(session=session, dimension_properties=ordered_properties, bias_property=bias_property)
+        properties_id = get_properties_obj(session=session, dimension_properties=ordered_properties,
+                                           bias_property=bias_property)
         # properties_id = get_properties_id(session, ordered_properties, bias_property=bias_property)
     except ValueError as ve:
         errors['properties_id'] = str(ve)
@@ -63,7 +66,8 @@ def gap(bias, snapshot, population):
         errors['aggregations_id'] = str(ve)
     # get metric
     try:
-        label_lang = non_orderable_query_params['label_lang'] if 'label_lang' in non_orderable_query_params else None
+        # default the label lang to 'en' if not set
+        label_lang = non_orderable_query_params['label_lang'] if 'label_lang' in non_orderable_query_params else 'en'
         metrics = build_metrics(session, fill_id=requested_fill_id, population_id=population_id,
                                 properties_id=properties_id,
                                 aggregations_id=aggregations_id,
@@ -71,7 +75,14 @@ def gap(bias, snapshot, population):
     except ValueError as ve:
         errors['metrics'] = str(ve)
     # convert table rows to jsonable dict
-    full_response = {str(requested_fill_date): {population_name: metrics}}
+    meta = {'snapshot':str(requested_fill_date),
+            'population':population_name,
+            'population_corrected':population_corrected,
+            'label_lang':label_lang,
+            'bias':bias,
+            'bias_property':bias_property,
+            'aggregation_properties':[Properties(p).name for p in properties_id.properties]}
+    full_response = {'meta':meta, 'metrics':metrics}
     return jsonify(**full_response)
 
 
