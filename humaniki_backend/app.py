@@ -75,14 +75,14 @@ def gap(bias, snapshot, population):
     except ValueError as ve:
         errors['metrics'] = str(ve)
     # convert table rows to jsonable dict
-    meta = {'snapshot':str(requested_fill_date),
-            'population':population_name,
-            'population_corrected':population_corrected,
-            'label_lang':label_lang,
-            'bias':bias,
-            'bias_property':bias_property,
-            'aggregation_properties':[Properties(p).name for p in properties_id.properties]}
-    full_response = {'meta':meta, 'metrics':metrics}
+    meta = {'snapshot': str(requested_fill_date),
+            'population': population_name,
+            'population_corrected': population_corrected,
+            'label_lang': label_lang,
+            'bias': bias,
+            'bias_property': bias_property,
+            'aggregation_properties': [Properties(p).name for p in properties_id.properties]}
+    full_response = {'meta': meta, 'metrics': metrics}
     return jsonify(**full_response)
 
 
