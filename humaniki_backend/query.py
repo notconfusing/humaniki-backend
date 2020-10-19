@@ -1,16 +1,14 @@
-import operator
-from collections.__init__ import defaultdict
-from functools import reduce
-
 from sqlalchemy.orm import aliased
 
+from humaniki_backend.utils import is_property_exclusively_citizenship
 from humaniki_schema import utils
 from humaniki_schema.queries import get_aggregations_obj
-from humaniki_schema.schema import metric, metric_aggregations_j, metric_properties_j, fill, label, project, label_misc
+from humaniki_schema.schema import metric, metric_aggregations_j, metric_properties_j, label, label_misc
 
 from sqlalchemy import func
 
 import pandas as pd
+
 
 def get_aggregations_ids(session, ordered_aggregations):
     # aggregations_id is None indicates there's no constraint on the aggregation_id
@@ -18,9 +16,10 @@ def get_aggregations_ids(session, ordered_aggregations):
         return None
     else:
         aggregation_objs = get_aggregations_obj(bias_value=None, dimension_values=ordered_aggregations,
-                             session=session, as_subquery=False, create_if_no_exist=False)
+                                                session=session, as_subquery=False, create_if_no_exist=False)
         aggregations_ids = [a.id for a in aggregation_objs]
         return aggregations_ids
+
 
 def build_metrics(session, fill_id, population_id, properties_id, aggregations_id, label_lang):
     """
@@ -37,7 +36,7 @@ def build_metrics(session, fill_id, population_id, properties_id, aggregations_i
     # query the metrics table
     metrics, metrics_columns = get_metrics(session, fill_id, population_id, properties_id, aggregations_id, label_lang)
     # make a nested dictionary represented the metrics
-    metrics_response = build_gap_response(properties_id, metrics, metrics_columns, label_lang)
+    metrics_response = build_gap_response(properties_id, metrics, metrics_columns, label_lang, session)
     return metrics_response
 
 
@@ -173,7 +172,7 @@ def get_metrics(session, fill_id, population_id, properties_id, aggregations_id,
     return metrics, metrics_columns
 
 
-def build_gap_response(properties_id, metrics_res, columns, label_lang):
+def build_gap_response(properties_id, metrics_res, columns, label_lang, session):
     """
     transforms a metrics response into a json-able serialization
     see https://docs.google.com/document/d/1tdm1Xixy-eUvZkCc02kqQre-VTxzUebsComFYefS5co/edit#heading=h.a8xg7ij7tuqm
@@ -182,6 +181,8 @@ def build_gap_response(properties_id, metrics_res, columns, label_lang):
     :return: response dict
     """
     prop_names = [utils.Properties(p).name.lower() for p in properties_id.properties]
+    is_citizenship = is_property_exclusively_citizenship(properties_id)
+    iso_codes = get_iso_codes_as_lookup_table(session) if is_citizenship else None
     col_names = [col['name'] for col in columns]
     aggr_cols = [col['name'] for col in columns if col['name'].startswith('agg')]
     label_cols = [col['name'] for col in columns if col['name'].startswith('label')]
@@ -192,79 +193,34 @@ def build_gap_response(properties_id, metrics_res, columns, label_lang):
     for group_i, (group_name, group) in enumerate(agg_groups):
         group_name_as_list = group_name if isinstance(group_name, tuple) else [group_name]
         item_d = dict(zip(prop_names, group_name_as_list))
-        values = dict(group[['bias_value','total']].to_dict('split')['data'])
-        labels = dict(group[['bias_value','bias_label']].to_dict('split')['data'])
+        values = dict(group[['bias_value', 'total']].to_dict('split')['data'])
+        labels = dict(group[['bias_value', 'bias_label']].to_dict('split')['data'])
         labels_prop_order = group[label_cols].iloc[0].values
         item_labels = dict(zip(prop_names, labels_prop_order))
-        data_point = {'order':group_i,
-                      'item':item_d,
+        if is_citizenship:
+            try:
+                item_labels['iso_3166'] = iso_codes[group_name]
+            except KeyError as ke:
+                print(f'iso code exception: {ke}')
+        data_point = {'order': group_i,
+                      'item': item_d,
                       'item_label': item_labels,
                       "values": values,
-                      'labels':labels}
+                      'labels': labels}
         data_points.append(data_point)
-
     return data_points
 
-    # number_of_aggregations = len(properties_id.properties)
-    # # print(f"number_of_aggregations:{number_of_aggregations}")
-    # bias_col_name = 'bias_label' if label_lang else 'bias_value'
-    # agg_col_prefix = 'agg_label' if label_lang else 'agg'
-    # agg_cols = [col['name'] for col in columns if col['name'].startswith(agg_col_prefix)]
-    # val_resp_dict = build_layer_default_dict(number_of_aggregations)
-    # for row_i, row in enumerate(metrics_res):
-    #     resp_dict_path = []
-    #     ## get the aggregation_values
-    #     agg_vals = [getattr(row, agg_col) for agg_col in agg_cols]
-    #     resp_dict_path.extend(agg_vals)
-    #     resp_dict_path.append(getattr(row, bias_col_name))
-    #     set_dict_path(val_resp_dict, resp_dict_path, row.total)
-    #     # item_d = [getattr(row, f'prop_{p}') for p in number_of_aggregations]
-    # return
 
+def get_iso_codes_as_lookup_table(session, iso_subtype='iso_3166_1'):
+    """
+    :return: a dict mapping qids to iso_3166_1
+    """
+    iso_codes = session.query(label_misc.src, label_misc.label).filter(label_misc.lang == iso_subtype).all()
+    iso_codes_df = pd.DataFrame.from_records(iso_codes)
+    iso_codes_dict = iso_codes_df.to_dict('split')['data']
+    return dict(iso_codes_dict)
 
-def get_latest_fill_id(session):
-    latest_q = session.query(func.max(fill.date)).subquery()
-    q = session.query(fill.id, fill.date).filter(fill.date == latest_q)
-    latest_fill_id, latest_fill_date = q.one()
-    return latest_fill_id, latest_fill_date
-
-
-def get_exact_fill_id(session, exact_fill_dt):
-    q = session.query(fill.id, fill.date).filter(fill.date == exact_fill_dt)
-    fill_id, fill_date = q.one()
-    return fill_id, fill_date
 
 def get_metrics_count(session):
     metrics_count = session.query(func.count(metric.fill_id)).scalar()
     return metrics_count
-
-# def build_layer_default_dict(n):
-#     """
-#     Build an n-level defaultdict    not sure if this is clever or unnecessary brain surgery, i'll never undestand again
-#     :param n: levels
-#     :return: a very-defaultdict
-#     """
-#     ret = defaultdict(dict)
-#     for layer in range(1, n):
-#         ret = defaultdict(lambda: ret)
-#     return ret
-#
-#
-# def get_dict_path(dct, key_path):
-#     '''
-#     :param dct: an n-nested dict of dicts
-#     :param key_path: a list of keys
-#     :return:
-#     '''
-#     return reduce(operator.getitem, key_path, dct)
-#
-#
-# def set_dict_path(dct, key_path, value):
-#     """
-#     :param dct:  an n-nested dict of dicts
-#     :param key_path: a list of keys
-#     :param value: a value to set a path location
-#     :return:
-#     """
-#     get_dict_path(dct, key_path[:-1])[key_path[-1]] = value
-#

@@ -5,11 +5,10 @@ from flask_cors import CORS
 
 from flask_sqlalchemy_session import flask_scoped_session
 
-from humaniki_backend.query import get_aggregations_ids, get_metrics, get_latest_fill_id, \
-    build_gap_response, build_metrics, get_metrics_count
+from humaniki_backend.query import get_aggregations_ids, get_metrics, build_gap_response, build_metrics, get_metrics_count
 from humaniki_backend.utils import determine_population_conflict, assert_gap_request_valid, \
-    order_query_params, get_pid_from_str, determine_fill_id
-from humaniki_schema.queries import get_properties_obj
+    order_query_params, get_pid_from_str, determine_fill_id, is_property_exclusively_citizenship
+from humaniki_schema.queries import get_properties_obj, get_latest_fill_id
 from humaniki_schema.utils import Properties, make_fill_dt
 
 app = Flask(__name__)
@@ -74,6 +73,7 @@ def gap(bias, snapshot, population):
                                 label_lang=label_lang)
     except ValueError as ve:
         errors['metrics'] = str(ve)
+
     # convert table rows to jsonable dict
     meta = {'snapshot': str(requested_fill_date),
             'population': population_name,

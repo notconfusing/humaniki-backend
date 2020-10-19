@@ -1,7 +1,8 @@
 from datetime import datetime
 
-from humaniki_backend.query import get_exact_fill_id
+from humaniki_schema.queries import get_exact_fill_id
 from humaniki_schema import utils
+from humaniki_schema.schema import metric_properties_j, metric_properties_n
 from humaniki_schema.utils import Properties, make_fill_dt, HUMANIKI_SNAPSHOT_DATE_FMT
 
 
@@ -67,6 +68,7 @@ def determine_population_conflict(population, query_params):
         pop = getattr(utils.PopulationDefinition, population.upper())
         return pop.value, pop.name, was_corrected
 
+
 def determine_fill_id(session, snapshot, latest_fill_id, latest_fill_dt):
     """
     figure out the fill id, given a string "latest" or a date in HUMANIKI_SNAPSHOT_DATE_FMT
@@ -75,7 +77,7 @@ def determine_fill_id(session, snapshot, latest_fill_id, latest_fill_dt):
     :return:
     """
     was_corrected = False
-    if snapshot.lower()=='latest':
+    if snapshot.lower() == 'latest':
         return latest_fill_id, latest_fill_dt, was_corrected
     else:
         try:
@@ -86,7 +88,13 @@ def determine_fill_id(session, snapshot, latest_fill_id, latest_fill_dt):
         if fill_id:
             return fill_id, fill_date, was_corrected
         else:
-            raise NotImplementedError(f'There is no snapshot exactly matching {snapshot} and closes-snapshots arent yet implemented')
+            raise NotImplementedError(
+                f'There is no snapshot exactly matching {snapshot} and closes-snapshots arent yet implemented')
             # was_corrected = True
-            #return corrected_fill_id, corrected_fill_date, was_corrected
+            # return corrected_fill_id, corrected_fill_date, was_corrected
 
+def is_property_exclusively_citizenship(properties_obj):
+    if isinstance(properties_obj, metric_properties_j):
+        return (properties_obj.properties_len == 1) and (properties_obj.properties[0] == utils.Properties.CITIZENSHIP.value)
+    elif isinstance(properties_obj, metric_properties_n):
+        raise NotImplementedError
