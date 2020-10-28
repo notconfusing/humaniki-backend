@@ -9,6 +9,8 @@ from sqlalchemy import func
 
 import pandas as pd
 
+from humaniki_schema.utils import Properties
+
 
 def get_aggregations_ids(session, ordered_aggregations):
     # aggregations_id is None indicates there's no constraint on the aggregation_id
@@ -36,8 +38,8 @@ def build_metrics(session, fill_id, population_id, properties_id, aggregations_i
     # query the metrics table
     metrics, metrics_columns = get_metrics(session, fill_id, population_id, properties_id, aggregations_id, label_lang)
     # make a nested dictionary represented the metrics
-    metrics_response = build_gap_response(properties_id, metrics, metrics_columns, label_lang, session)
-    return metrics_response
+    metrics_response, represented_biases = build_gap_response(properties_id, metrics, metrics_columns, label_lang, session)
+    return metrics_response, represented_biases
 
 
 def generate_json_expansion_values(properties):
@@ -68,10 +70,13 @@ def generate_aliased_tables_for_labelling(properties):
         if prop == 0:  # recall we are faking sitelinks as property 0
             label_table = label_misc
             join_key = 'src'
+        elif prop in [Properties.DATE_OF_BIRTH.value, Properties.DATE_OF_DEATH.value]:
+            label_table = None # there is no join to be made
+            join_key = None # there is no join to be made
         else:
             label_table = label
             join_key = 'qid'
-        aliased_label = aliased(label_table, name=f"label_{prop_i}")
+        aliased_label = aliased(label_table, name=f"label_{prop_i}") if label_table else None
         join_data = {'label_table': aliased_label, 'join_key': join_key}
         aliased_joins.append(join_data)
     return aliased_joins
@@ -89,7 +94,13 @@ def label_metric_query(session, metrics_subq, properties, label_lang):
     # i wish i could compute the alias joins inline in this function rather than upfront, but
     # I believe I need the column names before I can start joining.
     aliased_joins = generate_aliased_tables_for_labelling(properties)
-    aliased_label_cols = [aj['label_table'].label.label(f'label_agg_{i}') for i, aj in enumerate(aliased_joins)]
+    aliased_label_cols = []
+    for i, aj in enumerate(aliased_joins):
+        if aj['label_table']:
+            label_col = aj['label_table'].label.label(f'label_agg_{i}')
+        else: # we probably aren't joining, like for labelling years
+            label_col = getattr(metrics_subq.c, f'agg_{i}').label(f'label_agg_{i}')
+        aliased_label_cols.append(label_col)
 
     label_query_cols = [metrics_subq, label.label.label('bias_label'), *aliased_label_cols]
     # first there will always be the bias_value to label
@@ -100,18 +111,20 @@ def label_metric_query(session, metrics_subq, properties, label_lang):
 
     # then there are the aggregation values to label.
     for j, aliased_join in enumerate(aliased_joins):
-        # the left key from the unlabelled metric
-        metrics_subq_join_col = getattr(metrics_subq.c, f'agg_{j}')
-        # define the right key
-        label_join_table = aliased_join['label_table']
-        label_join_key = aliased_join['join_key']
-        label_join_column = getattr(label_join_table, label_join_key)
+        # we may or not need to join depending on the label_table
+        if aliased_join['label_table']:
+            # the left key from the unlabelled metric
+            metrics_subq_join_col = getattr(metrics_subq.c, f'agg_{j}')
+            # define the right key
+            label_join_table = aliased_join['label_table']
+            label_join_key = aliased_join['join_key']
+            label_join_column = getattr(label_join_table, label_join_key)
 
-        #  make a left join to make sure no metrics are being dropped
-        # and also the join table needs to be subsetted to the correct langauge
-        labelled_q = labelled_q \
-            .outerjoin(label_join_table, label_join_column == metrics_subq_join_col) \
-            .filter(label_join_table.lang == label_lang)
+            #  make a left join to make sure no metrics are being dropped
+            # and also the join table needs to be subsetted to the correct langauge
+            labelled_q = labelled_q \
+                .outerjoin(label_join_table, label_join_column == metrics_subq_join_col) \
+                .filter(label_join_table.lang == label_lang)
 
     return labelled_q
 
@@ -186,15 +199,16 @@ def build_gap_response(properties_id, metrics_res, columns, label_lang, session)
     col_names = [col['name'] for col in columns]
     aggr_cols = [col['name'] for col in columns if col['name'].startswith('agg')]
     label_cols = [col['name'] for col in columns if col['name'].startswith('label')]
+    # use pandas to group by all dimensions except gender
     metric_df = pd.DataFrame.from_records(metrics_res, columns=col_names)
     metric_df.to_dict()
     agg_groups = metric_df.groupby(by=aggr_cols)
+    # accumulator pattern
     data_points = []
     for group_i, (group_name, group) in enumerate(agg_groups):
         group_name_as_list = group_name if isinstance(group_name, tuple) else [group_name]
         item_d = dict(zip(prop_names, group_name_as_list))
         values = dict(group[['bias_value', 'total']].to_dict('split')['data'])
-        labels = dict(group[['bias_value', 'bias_label']].to_dict('split')['data'])
         labels_prop_order = group[label_cols].iloc[0].values
         item_labels = dict(zip(prop_names, labels_prop_order))
         if is_citizenship:
@@ -206,9 +220,23 @@ def build_gap_response(properties_id, metrics_res, columns, label_lang, session)
                       'item': item_d,
                       'item_label': item_labels,
                       "values": values,
-                      'labels': labels}
+                      }
+        # including this just once in the meta portion for now.
+        # if label_lang:
+        #     labels = dict(group[['bias_value', 'bias_label']].to_dict('split')['data'])
+        #     data_point['labels'] = labels
         data_points.append(data_point)
-    return data_points
+
+    represented_biases = make_represented_genders(metric_df, label_lang) if label_lang else None
+
+    return data_points, represented_biases
+
+def make_represented_genders(metric_df, label_lang):
+    """
+    return a dict of the represented genders and  (maybe their label) to make life easy for the front end.
+    :return:
+    """
+    return dict(metric_df[['bias_value','bias_label']].drop_duplicates().to_dict('split')['data'])
 
 
 def get_iso_codes_as_lookup_table(session, iso_subtype='iso_3166_1'):

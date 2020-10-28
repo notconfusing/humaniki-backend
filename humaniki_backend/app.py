@@ -66,8 +66,8 @@ def gap(bias, snapshot, population):
     # get metric
     try:
         # default the label lang to 'en' if not set
-        label_lang = non_orderable_query_params['label_lang'] if 'label_lang' in non_orderable_query_params else 'en'
-        metrics = build_metrics(session, fill_id=requested_fill_id, population_id=population_id,
+        label_lang = non_orderable_query_params['label_lang'] if 'label_lang' in non_orderable_query_params else None
+        metrics, represented_biases = build_metrics(session, fill_id=requested_fill_id, population_id=population_id,
                                 properties_id=properties_id,
                                 aggregations_id=aggregations_id,
                                 label_lang=label_lang)
@@ -82,6 +82,8 @@ def gap(bias, snapshot, population):
             'bias': bias,
             'bias_property': bias_property,
             'aggregation_properties': [Properties(p).name for p in properties_id.properties]}
+    if represented_biases:
+        meta['bias_labels'] = represented_biases
     full_response = {'meta': meta, 'metrics': metrics}
     return jsonify(**full_response)
 

@@ -76,8 +76,22 @@ def test_by_language_enwiki_fr(client, test_jsons):
     resp = rv.get_json()
     expected_json = test_jsons['properties_enwiki_fr.json']
     actual_data = resp['metrics']
+    actual_meta = resp['meta']
     expected_data = expected_json['metrics']
     assert len(actual_data) == len(expected_data)
     the_only_item = actual_data[0]
-    assert 'masculin' in the_only_item['labels'].values()
+    assert 'masculin' in actual_meta['bias_labels'].values()
     assert resp['meta']['label_lang'] == 'fr'
+
+
+def test_by_dob(client, test_jsons):
+    rv = client.get('/v1/gender/gap/latest/gte_one_sitelink/properties?date_of_birth=all&label_lang=en')
+    resp = rv.get_json()
+    expected_json = test_jsons['properties_dob.json']
+    actual_data = resp['metrics']
+    actual_meta = resp['meta']
+    expected_data = expected_json['metrics']
+    expected_meta = expected_json['meta']
+    assert len(actual_data) == len(expected_data)
+    assert len(actual_meta['bias_labels']) == len(expected_meta['bias_labels'])
+    assert actual_meta['bias_labels']['6581097'] == expected_meta['bias_labels']['6581097']
