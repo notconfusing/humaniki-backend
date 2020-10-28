@@ -60,7 +60,7 @@ def gap(bias, snapshot, population):
         errors['properties_id'] = str(ve)
     # get aggregations-id
     try:
-        aggregations_id = get_aggregations_ids(session, ordered_query_params)
+        aggregations_id = get_aggregations_ids(session, ordered_query_params, non_orderable_query_params)
     except ValueError as ve:
         errors['aggregations_id'] = str(ve)
     # get metric
@@ -68,9 +68,8 @@ def gap(bias, snapshot, population):
         # default the label lang to 'en' if not set
         label_lang = non_orderable_query_params['label_lang'] if 'label_lang' in non_orderable_query_params else None
         metrics, represented_biases = build_metrics(session, fill_id=requested_fill_id, population_id=population_id,
-                                properties_id=properties_id,
-                                aggregations_id=aggregations_id,
-                                label_lang=label_lang)
+                                                    properties_id=properties_id, aggregations_id=aggregations_id,
+                                                    label_lang=label_lang)
     except ValueError as ve:
         errors['metrics'] = str(ve)
 

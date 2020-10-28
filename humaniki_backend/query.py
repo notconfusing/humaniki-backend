@@ -3,7 +3,8 @@ from sqlalchemy.orm import aliased
 from humaniki_backend.utils import is_property_exclusively_citizenship
 from humaniki_schema import utils
 from humaniki_schema.queries import get_aggregations_obj
-from humaniki_schema.schema import metric, metric_aggregations_j, metric_properties_j, label, label_misc
+from humaniki_schema.schema import metric, metric_aggregations_j, metric_properties_j, label, label_misc, \
+    metric_aggregations_n
 
 from sqlalchemy import func
 
@@ -12,21 +13,28 @@ import pandas as pd
 from humaniki_schema.utils import Properties
 
 
-def get_aggregations_ids(session, ordered_aggregations):
+def get_aggregations_ids(session, ordered_aggregations, non_orderable_params):
     # aggregations_id is None indicates there's no constraint on the aggregation_id
-    if all([v == 'all' for v in ordered_aggregations.values()]):
+    has_no_specific_aggregation_criteria = all([v == 'all' for v in ordered_aggregations.values()])
+    has_dob_criteria = all([pid in [Properties.DATE_OF_BIRTH.value, Properties.DATE_OF_DEATH.value] for pid in ordered_aggregations.keys()])
+    if has_no_specific_aggregation_criteria :
         return None
+    elif has_dob_criteria:
+        table_to_use = metric_aggregations_n
     else:
-        aggregation_objs = get_aggregations_obj(bias_value=None, dimension_values=ordered_aggregations,
-                                                session=session, as_subquery=False, create_if_no_exist=False)
-        aggregations_ids = [a.id for a in aggregation_objs]
-        return aggregations_ids
+        table_to_use = metric_aggregations_j
+
+    aggregation_objs = get_aggregations_obj(bias_value=None, dimension_values=ordered_aggregations,
+                                                session=session, table=table_to_use)
+    aggregations_ids = [a.id for a in aggregation_objs]
+    return aggregations_ids
 
 
 def build_metrics(session, fill_id, population_id, properties_id, aggregations_id, label_lang):
     """
     the entry point for building metrics, first querys the database for the metrics in question
     secondly, builds the nested-dict response.
+    :param non_orderable_params:
     :param session:
     :param fill_id:
     :param population_id:
