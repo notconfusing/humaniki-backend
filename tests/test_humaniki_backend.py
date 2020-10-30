@@ -108,3 +108,24 @@ def test_by_dob(client, test_jsons):
     assert len(actual_data) == len(expected_data)
     assert len(actual_meta['bias_labels']) == len(expected_meta['bias_labels'])
     assert actual_meta['bias_labels']['6581097'] == expected_meta['bias_labels']['6581097']
+
+def test_by_dob_start(client, test_jsons):
+    resp = client.get('/v1/gender/gap/latest/gte_one_sitelink/properties?date_of_birth=1970~').get_json()
+    expected_json = test_jsons['properties_dob_start.json']
+    actual_data, actual_meta = resp['metrics'], resp['meta']
+    expected_data, expected_meta = expected_json['metrics'], expected_json['meta']
+    assert len(actual_data) == len(expected_data)
+
+def test_by_dob_end(client, test_jsons):
+    resp = client.get('/v1/gender/gap/latest/gte_one_sitelink/properties?date_of_birth=~1970').get_json()
+    expected_json = test_jsons['properties_dob_end.json']
+    actual_data, actual_meta = resp['metrics'], resp['meta']
+    expected_data, expected_meta = expected_json['metrics'], expected_json['meta']
+    assert len(actual_data) == len(expected_data)
+
+def test_by_dob_start_end(client, test_jsons):
+    resp = client.get('/v1/gender/gap/latest/gte_one_sitelink/properties?date_of_birth=1809~1952').get_json()
+    expected_json = test_jsons['properties_dob_start_end.json']
+    actual_data, actual_meta = resp['metrics'], resp['meta']
+    expected_data, expected_meta = expected_json['metrics'], expected_json['meta']
+    assert len(actual_data) == len(expected_data)

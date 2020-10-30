@@ -1,10 +1,14 @@
 from datetime import datetime
 
+from sqlalchemy import and_
+
 from humaniki_schema.queries import get_exact_fill_id
 from humaniki_schema import utils
-from humaniki_schema.schema import metric_properties_j, metric_properties_n
+from humaniki_schema.schema import metric_properties_j, metric_properties_n, metric_aggregations_n
 from humaniki_schema.utils import Properties, make_fill_dt, HUMANIKI_SNAPSHOT_DATE_FMT
 
+
+DATE_RANGE_SEPERATOR = '~'
 
 def get_pid_from_str(property_str):
     try:
@@ -47,6 +51,7 @@ def assert_gap_request_valid(snapshot, population, query_params):
     # - ['country', 'year_of_birth_start', 'year_of_birth_end',
     #     'occupation', 'project']
     # assert that label_lang is valid
+    # assert any date range is valid (1900~1950, ~1900, 1900~)
     return True
 
 
@@ -98,3 +103,34 @@ def is_property_exclusively_citizenship(properties_obj):
         return (properties_obj.properties_len == 1) and (properties_obj.properties[0] == utils.Properties.CITIZENSHIP.value)
     elif isinstance(properties_obj, metric_properties_n):
         raise NotImplementedError
+
+
+def transform_ordered_aggregaitons_with_year_fns(ordered_aggregations):
+    """
+    in the year elements of the aggregations, transform their query param into a sqlalchemy func
+    :param ordered_aggregations:
+    :return: dict, ordered aggregations
+    """
+    # TODO, generalize to include DOB as well
+    agg_to_transform = Properties.DATE_OF_BIRTH.value
+    # transform string into range
+    year_range_str = ordered_aggregations[agg_to_transform]
+    # Expecting a string like "YYYY~YYYY" but either the left or the right half could be missing
+    # Validation occurs elsewhere
+    start_year_str, stop_year_str =  year_range_str.split(DATE_RANGE_SEPERATOR)
+    start_year, stop_year = int(start_year_str) if start_year_str else None, int(stop_year_str) if stop_year_str else None
+    # transform range into funcs of an metric_aggregations_n.value column
+    if (start_year is not None) and (stop_year is not None):
+        # if they both exist combine them with and
+        def year_fn(agg_value):
+            return and_(agg_value >= start_year, agg_value <= stop_year)
+    elif start_year is not None:
+        # it must be the case that just the left or right exists
+        def year_fn(agg_value):
+            return agg_value >= start_year
+    else:
+        def year_fn(agg_value):
+            return agg_value <= stop_year
+    # overwrite value to sql funcs in ordered_aggregations
+    ordered_aggregations[agg_to_transform] = year_fn
+    return ordered_aggregations

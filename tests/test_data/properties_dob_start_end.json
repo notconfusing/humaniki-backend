@@ -1,0 +1,1 @@
+{"meta":{"aggregation_properties":["DATE_OF_BIRTH"],"bias":"gender","bias_property":21,"label_lang":null,"population":"GTE_ONE_SITELINK","population_corrected":false,"snapshot":"2018-01-01"},"metrics":[{"item":{"date_of_birth":"1809"},"item_label":{},"order":0,"values":{"6581097":1}},{"item":{"date_of_birth":"1952"},"item_label":{},"order":1,"values":{"6581097":1}}]}
