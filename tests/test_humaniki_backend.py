@@ -9,6 +9,8 @@ from humaniki_schema import generate_example_data, db
 from humaniki_backend import app
 from humaniki_schema.schema import metric
 from humaniki_schema.utils import read_config_file
+from unittest import TestCase
+tc = TestCase()
 
 config = read_config_file(os.environ['HUMANIKI_YAML_CONFIG'], __file__)
 
@@ -52,7 +54,7 @@ def test_by_language_all(client, test_jsons):
     rv = client.get('/v1/gender/gap/latest/all_wikidata/properties?project=all')
     resp = rv.get_json()
     resp_snap_key = list(resp.keys())[0]
-    expected_json = test_jsons['properties_all.json']
+    expected_json = test_jsons['properties_proj_all.json']
     assert expected_json['meta']['population'] == 'GTE_ONE_SITELINK'
     assert expected_json['meta']['population_corrected'] == True
     actual_data = resp['metrics']
@@ -129,3 +131,36 @@ def test_by_dob_start_end(client, test_jsons):
     actual_data, actual_meta = resp['metrics'], resp['meta']
     expected_data, expected_meta = expected_json['metrics'], expected_json['meta']
     assert len(actual_data) == len(expected_data)
+
+
+def test_by_dob_start_end(client, test_jsons):
+    resp = client.get('/v1/gender/gap/latest/gte_one_sitelink/properties?date_of_birth=1809~1952').get_json()
+    expected_json = test_jsons['properties_dob_start_end.json']
+    actual_data, actual_meta = resp['metrics'], resp['meta']
+    expected_data, expected_meta = expected_json['metrics'], expected_json['meta']
+    assert len(actual_data) == len(expected_data)
+
+def test_by_proj_all_dob_1966(client, test_jsons):
+    resp = client.get('/v1/gender/gap/latest/gte_one_sitelink/properties?project=all&dob=1966').get_json()
+    expected_json = test_jsons['properties_proj_all_dob_1966.json']
+    actual_data, actual_meta = resp['metrics'], resp['meta']
+    expected_data, expected_meta = expected_json['metrics'], expected_json['meta']
+    assert len(actual_data) == len(expected_data)
+
+def test_by_proj_all_dob_1966_citizenship_all_en(client, test_jsons):
+    resp = client.get('/v1/gender/gap/latest/gte_one_sitelink/properties?project=all&date_of_birth=1966&citizenship=all&label_lang=en').get_json()
+    expected_json = test_jsons['properties_proj_all_dob_1966_citizenship_all_en.json']
+    actual_data, actual_meta = resp['metrics'], resp['meta']
+    expected_data, expected_meta = expected_json['metrics'], expected_json['meta']
+    assert len(actual_data) == len(expected_data)
+    assert len(actual_data[0]['item_label']) == 3 # the number of aggregations specified
+
+def test_by_proj_all_dob_all_citizenship_all(client, test_jsons):
+    resp = client.get('/v1/gender/gap/latest/all_wikidata/properties?project=all&dob=all&citizenship=all').get_json()
+    expected_json = test_jsons['properties_proj_all_dob_all_citizenship_all.json']
+    actual_data, actual_meta = resp['metrics'], resp['meta']
+    expected_data, expected_meta = expected_json['metrics'], expected_json['meta']
+    assert len(actual_data) == len(expected_data)
+    actual_first_item = actual_data[0]
+    expected_first_item = expected_data[0]
+    tc.assertEqual(actual_first_item['values'], expected_first_item['values'])
