@@ -47,11 +47,17 @@ def build_metrics(session, fill_id, population_id, properties_id, aggregations_i
     # query the metrics table
     build_metrics_start_time = time.time()
     metrics, metrics_columns = get_metrics(session, fill_id, population_id, properties_id, aggregations_id, label_lang)
+    build_metrics_query_end_time = time.time()
+
     # make a nested dictionary represented the metrics
     metrics_response, represented_biases = build_gap_response(properties_id, metrics, metrics_columns, label_lang, session)
-    build_metrics_end_time = time.time()
-    build_metrics_seconds_taken = build_metrics_end_time - build_metrics_start_time
-    print(f"Building metrics repsponse took {'%.3f'%build_metrics_seconds_taken} seconds")
+    build_metrics_grouping_end_time = time.time()
+
+    #timing
+    query_metrics_seconds_taken = build_metrics_query_end_time - build_metrics_start_time
+    group_metrics_seconds_taken = build_metrics_grouping_end_time - build_metrics_query_end_time
+    print(f"Querying metrics repsponse took {'%.3f'%query_metrics_seconds_taken} seconds")
+    print(f"Grouping metrics repsponse took {'%.3f'%group_metrics_seconds_taken} seconds")
     return metrics_response, represented_biases
 
 
@@ -191,7 +197,8 @@ def get_metrics(session, fill_id, population_id, properties_id, aggregations_id,
         metrics_subq = metrics_q.subquery('metrics_driver')
         metrics_q = label_metric_query(session, metrics_subq, properties, label_lang)
 
-    # print(f'metrics_q is {metrics_q}')
+    print(f'metrics_q is:'
+          f' {metrics_q.statement.compile(compile_kwargs={"literal_binds": True})}')
     metrics = metrics_q.all()
     metrics_columns = metrics_q.column_descriptions
     print(f'Number of metrics to return are {len(metrics)}')
