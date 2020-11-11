@@ -1,3 +1,5 @@
+import time
+
 from sqlalchemy.orm import aliased
 
 from humaniki_backend.utils import is_property_exclusively_citizenship, transform_ordered_aggregaitons_with_year_fns
@@ -43,9 +45,13 @@ def build_metrics(session, fill_id, population_id, properties_id, aggregations_i
     :return:
     """
     # query the metrics table
+    build_metrics_start_time = time.time()
     metrics, metrics_columns = get_metrics(session, fill_id, population_id, properties_id, aggregations_id, label_lang)
     # make a nested dictionary represented the metrics
     metrics_response, represented_biases = build_gap_response(properties_id, metrics, metrics_columns, label_lang, session)
+    build_metrics_end_time = time.time()
+    build_metrics_seconds_taken = build_metrics_end_time - build_metrics_start_time
+    print(f"Building metrics repsponse took {'%.3f'%build_metrics_seconds_taken} seconds")
     return metrics_response, represented_biases
 
 
