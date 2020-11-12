@@ -114,36 +114,45 @@ def label_metric_query(session, metrics_subq, properties, label_lang):
     # I believe I need the column names before I can start joining.
     aliased_joins = generate_aliased_tables_for_labelling(properties)
     aliased_label_cols = []
+    dimension_label_params = []
     for i, aj in enumerate(aliased_joins):
         if aj['label_table']:
-            label_col = aj['label_table'].label.label(f'label_agg_{i}')
+            # the left key from the unlabelled metric
+            metrics_subq_join_col = getattr(metrics_subq.c, f'agg_{i}')
+            # define the right key
+            label_join_table = aj['label_table']
+            label_join_key = aj['join_key']
+            label_subtable_cols = [getattr(label_join_table, label_join_key),
+                                   getattr(label_join_table, 'lang'),
+                                   getattr(label_join_table,'label')]
+            label_join_table_lang_filtered = session.query(*label_subtable_cols) \
+                .filter(label_join_table.lang==label_lang) \
+                .subquery(f'label_sub_{i}')
+
+            # was
+            # label_col = aj['label_table'].label.label(f'label_agg_{i}')
+            label_col = label_join_table_lang_filtered.c.label.label(f'label_agg_{i}')
+
+            label_join_column = getattr(label_join_table_lang_filtered.c, label_join_key)
+            dimension_label_tuple = (label_join_table_lang_filtered, label_join_column, metrics_subq_join_col)
+            dimension_label_params.append(dimension_label_tuple)
+
         else: # we probably aren't joining, like for labelling years
             label_col = getattr(metrics_subq.c, f'agg_{i}').label(f'label_agg_{i}')
         aliased_label_cols.append(label_col)
 
-    label_query_cols = [metrics_subq, label.label.label('bias_label'), *aliased_label_cols]
+
     # first there will always be the bias_value to label
+    bias_sublabel_table = session.query(label).filter(label.lang==label_lang).subquery('label_sub')
+
+    label_query_cols = [metrics_subq, bias_sublabel_table.c.label.label('bias_label'), *aliased_label_cols]
     labelled_q = session.query(*label_query_cols) \
-        .outerjoin(label,
-                   label.qid == metrics_subq.c.bias_value) \
-        .filter(label.lang == label_lang)
+        .outerjoin(bias_sublabel_table,
+                   bias_sublabel_table.c.qid == metrics_subq.c.bias_value)
 
-    # then there are the aggregation values to label.
-    for j, aliased_join in enumerate(aliased_joins):
-        # we may or not need to join depending on the label_table
-        if aliased_join['label_table']:
-            # the left key from the unlabelled metric
-            metrics_subq_join_col = getattr(metrics_subq.c, f'agg_{j}')
-            # define the right key
-            label_join_table = aliased_join['label_table']
-            label_join_key = aliased_join['join_key']
-            label_join_column = getattr(label_join_table, label_join_key)
-
-            #  make a left join to make sure no metrics are being dropped
-            # and also the join table needs to be subsetted to the correct langauge
-            labelled_q = labelled_q \
-                .outerjoin(label_join_table, label_join_column == metrics_subq_join_col) \
-                .filter(label_join_table.lang == label_lang)
+    for (label_join_table_lang_filtered, label_join_column, metrics_subq_join_col) in dimension_label_params:
+        labelled_q = labelled_q \
+            .outerjoin(label_join_table_lang_filtered, label_join_column == metrics_subq_join_col)
 
     return labelled_q
 
