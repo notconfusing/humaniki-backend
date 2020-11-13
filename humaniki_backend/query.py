@@ -231,7 +231,9 @@ def build_gap_response(properties_id, metrics_res, columns, label_lang, session)
     # use pandas to group by all dimensions except gender
     metric_df = pd.DataFrame.from_records(metrics_res, columns=col_names)
     metric_df.to_dict()
+    pandas_groupby_start = time.time()
     agg_groups = metric_df.groupby(by=aggr_cols)
+    pandas_groupby_end = time.time()
     # accumulator pattern
     data_points = []
     for group_i, (group_name, group) in enumerate(agg_groups):
@@ -248,13 +250,15 @@ def build_gap_response(properties_id, metrics_res, columns, label_lang, session)
         data_point = {'order': group_i,
                       'item': item_d,
                       'item_label': item_labels,
-                      "values": values,
-                      }
+                      "values": values}
         # including this just once in the meta portion for now.
         # if label_lang:
         #     labels = dict(group[['bias_value', 'bias_label']].to_dict('split')['data'])
         #     data_point['labels'] = labels
         data_points.append(data_point)
+    pandas_group_iteration_end = time.time()
+    print(f'pandas groupby took {pandas_groupby_end-pandas_groupby_start} seconds')
+    print(f'pandas group iteration took {pandas_group_iteration_end-pandas_groupby_end} seconds')
 
     represented_biases = make_represented_genders(metric_df, label_lang) if label_lang else None
 
