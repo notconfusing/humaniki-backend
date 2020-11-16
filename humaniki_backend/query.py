@@ -2,7 +2,7 @@ import time
 
 from sqlalchemy.orm import aliased
 
-from humaniki_backend.utils import is_property_exclusively_citizenship, transform_ordered_aggregaitons_with_year_fns
+from humaniki_backend.utils import is_property_exclusively_citizenship, transform_ordered_aggregations_with_year_fns
 from humaniki_schema import utils
 from humaniki_schema.queries import get_aggregations_obj
 from humaniki_schema.schema import metric, metric_aggregations_j, metric_properties_j, label, label_misc, \
@@ -22,7 +22,7 @@ def get_aggregations_ids(session, ordered_aggregations, non_orderable_params):
     if has_no_specific_aggregation_criteria :
         return None
     if has_dob_criteria:
-        ordered_aggregations = transform_ordered_aggregaitons_with_year_fns(ordered_aggregations)
+        ordered_aggregations = transform_ordered_aggregations_with_year_fns(ordered_aggregations)
 
     aggregation_objs = get_aggregations_obj(bias_value=None, dimension_values=ordered_aggregations,
                                                 session=session, table=metric_aggregations_n)

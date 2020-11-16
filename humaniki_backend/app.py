@@ -58,11 +58,13 @@ def gap(bias, snapshot, population):
         # properties_id = get_properties_id(session, ordered_properties, bias_property=bias_property)
     except ValueError as ve:
         errors['properties_id'] = str(ve)
+        print("Errors", errors)
     # get aggregations-id
     try:
         aggregations_id = get_aggregations_ids(session, ordered_query_params, non_orderable_query_params)
     except ValueError as ve:
         errors['aggregations_id'] = str(ve)
+        print("Errors", errors)
     # get metric
     try:
         # default the label lang to 'en' if not set

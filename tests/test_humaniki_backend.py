@@ -141,7 +141,7 @@ def test_by_dob_start_end(client, test_jsons):
     assert len(actual_data) == len(expected_data)
 
 def test_by_proj_all_dob_1966(client, test_jsons):
-    resp = client.get('/v1/gender/gap/latest/gte_one_sitelink/properties?project=all&dob=1966').get_json()
+    resp = client.get('/v1/gender/gap/latest/gte_one_sitelink/properties?project=all&date_of_birth=1966').get_json()
     expected_json = test_jsons['properties_proj_all_dob_1966.json']
     actual_data, actual_meta = resp['metrics'], resp['meta']
     expected_data, expected_meta = expected_json['metrics'], expected_json['meta']
@@ -156,7 +156,7 @@ def test_by_proj_all_dob_1966_citizenship_all_en(client, test_jsons):
     assert len(actual_data[0]['item_label']) == 3 # the number of aggregations specified
 
 def test_by_proj_all_dob_all_citizenship_all(client, test_jsons):
-    resp = client.get('/v1/gender/gap/latest/all_wikidata/properties?project=all&dob=all&citizenship=all').get_json()
+    resp = client.get('/v1/gender/gap/latest/all_wikidata/properties?project=all&date_of_birth=all&citizenship=all').get_json()
     expected_json = test_jsons['properties_proj_all_dob_all_citizenship_all.json']
     actual_data, actual_meta = resp['metrics'], resp['meta']
     expected_data, expected_meta = expected_json['metrics'], expected_json['meta']
