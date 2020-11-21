@@ -143,12 +143,12 @@ def label_metric_query(session, metrics_subq, properties, label_lang):
 
 
     # first there will always be the bias_value to label
-    bias_sublabel_table = session.query(label).filter(label.lang==label_lang).subquery('label_sub')
+    bias_sublabel_table = session.query(label_misc).filter(label_misc.lang==label_lang, label_misc.type=='bias').subquery('label_sub')
 
     label_query_cols = [metrics_subq, bias_sublabel_table.c.label.label('bias_label'), *aliased_label_cols]
     labelled_q = session.query(*label_query_cols) \
         .outerjoin(bias_sublabel_table,
-                   bias_sublabel_table.c.qid == metrics_subq.c.bias_value)
+                   bias_sublabel_table.c.src == metrics_subq.c.bias_value)
 
     for (label_join_table_lang_filtered, label_join_column, metrics_subq_join_col) in dimension_label_params:
         labelled_q = labelled_q \
