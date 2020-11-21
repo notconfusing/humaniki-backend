@@ -61,7 +61,7 @@ def gap(bias, snapshot, population):
         print("Errors", errors)
     # get aggregations-id
     try:
-        aggregations_id = get_aggregations_ids(session, ordered_query_params, non_orderable_query_params)
+        aggregations_id = get_aggregations_ids(session, ordered_query_params, non_orderable_query_params, as_subquery=True)
     except ValueError as ve:
         errors['aggregations_id'] = str(ve)
         print("Errors", errors)

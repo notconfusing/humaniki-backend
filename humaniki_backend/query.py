@@ -2,32 +2,44 @@ import time
 
 from sqlalchemy.orm import aliased
 
-from humaniki_backend.utils import is_property_exclusively_citizenship, transform_ordered_aggregations_with_year_fns
+from humaniki_backend.utils import is_property_exclusively_citizenship, transform_ordered_aggregations_with_year_fns, \
+    transform_ordered_aggregations_with_proj_internal_codes
 from humaniki_schema import utils
 from humaniki_schema.queries import get_aggregations_obj
 from humaniki_schema.schema import metric, metric_aggregations_j, metric_properties_j, label, label_misc, \
     metric_aggregations_n
 
-from sqlalchemy import func
+from sqlalchemy import func, and_
 
 import pandas as pd
 
 from humaniki_schema.utils import Properties
 
 
-def get_aggregations_ids(session, ordered_aggregations, non_orderable_params):
+def get_aggregations_ids(session, ordered_aggregations, non_orderable_params, as_subquery=True):
     # aggregations_id is None indicates there's no constraint on the aggregation_id
     has_no_specific_aggregation_criteria = all([v == 'all' for v in ordered_aggregations.values()])
-    has_dob_criteria = all([pid in [Properties.DATE_OF_BIRTH.value, Properties.DATE_OF_DEATH.value] for pid in ordered_aggregations.keys()])
-    if has_no_specific_aggregation_criteria :
+    has_dob_criteria = any([pid in [Properties.DATE_OF_BIRTH.value, Properties.DATE_OF_DEATH.value] for pid in
+                            ordered_aggregations.keys()])
+    has_project_criteria = any([pid == Properties.PROJECT.value for pid in ordered_aggregations.keys()])
+    if has_no_specific_aggregation_criteria:
         return None
     if has_dob_criteria:
+        # make the year string into functions
         ordered_aggregations = transform_ordered_aggregations_with_year_fns(ordered_aggregations)
+    if has_project_criteria:
+        # transform the project tag into an internal code
+        ordered_aggregations = transform_ordered_aggregations_with_proj_internal_codes(ordered_aggregations, session)
 
-    aggregation_objs = get_aggregations_obj(bias_value=None, dimension_values=ordered_aggregations,
+    if as_subquery:
+        # optimized
+        return ordered_aggregations
+    else:
+        # getting ids for an "in_(*agg_ids)" statement
+        aggregation_objs = get_aggregations_obj(bias_value=None, dimension_values=ordered_aggregations,
                                                 session=session, table=metric_aggregations_n)
-    # making these unique, but of course the real optimization is to return this as a subquery
-    aggregations_ids = list(set([a.id for a in aggregation_objs]))
+        # making these unique, but of course the real optimization is to return this as a subquery
+        aggregations_ids = list(set([a.id for a in aggregation_objs]))
     return aggregations_ids
 
 
@@ -50,10 +62,11 @@ def build_metrics(session, fill_id, population_id, properties_id, aggregations_i
     build_metrics_query_end_time = time.time()
 
     # make a nested dictionary represented the metrics
-    metrics_response, represented_biases = build_gap_response(properties_id, metrics, metrics_columns, label_lang, session)
+    metrics_response, represented_biases = build_gap_response(properties_id, metrics, metrics_columns, label_lang,
+                                                              session)
     build_metrics_grouping_end_time = time.time()
 
-    #timing
+    # timing
     query_metrics_seconds_taken = build_metrics_query_end_time - build_metrics_start_time
     group_metrics_seconds_taken = build_metrics_grouping_end_time - build_metrics_query_end_time
     print(f"Querying metrics repsponse took {'%.3f'%query_metrics_seconds_taken} seconds")
@@ -90,8 +103,8 @@ def generate_aliased_tables_for_labelling(properties):
             label_table = label_misc
             join_key = 'src'
         elif prop in [Properties.DATE_OF_BIRTH.value, Properties.DATE_OF_DEATH.value]:
-            label_table = None # there is no join to be made
-            join_key = None # there is no join to be made
+            label_table = None  # there is no join to be made
+            join_key = None  # there is no join to be made
         else:
             label_table = label
             join_key = 'qid'
@@ -124,9 +137,9 @@ def label_metric_query(session, metrics_subq, properties, label_lang):
             label_join_key = aj['join_key']
             label_subtable_cols = [getattr(label_join_table, label_join_key),
                                    getattr(label_join_table, 'lang'),
-                                   getattr(label_join_table,'label')]
+                                   getattr(label_join_table, 'label')]
             label_join_table_lang_filtered = session.query(*label_subtable_cols) \
-                .filter(label_join_table.lang==label_lang) \
+                .filter(label_join_table.lang == label_lang) \
                 .subquery(f'label_sub_{i}')
 
             # was
@@ -137,13 +150,13 @@ def label_metric_query(session, metrics_subq, properties, label_lang):
             dimension_label_tuple = (label_join_table_lang_filtered, label_join_column, metrics_subq_join_col)
             dimension_label_params.append(dimension_label_tuple)
 
-        else: # we probably aren't joining, like for labelling years
+        else:  # we probably aren't joining, like for labelling years
             label_col = getattr(metrics_subq.c, f'agg_{i}').label(f'label_agg_{i}')
         aliased_label_cols.append(label_col)
 
-
     # first there will always be the bias_value to label
-    bias_sublabel_table = session.query(label_misc).filter(label_misc.lang==label_lang, label_misc.type=='bias').subquery('label_sub')
+    bias_sublabel_table = session.query(label_misc).filter(label_misc.lang == label_lang,
+                                                           label_misc.type == 'bias').subquery('label_sub')
 
     label_query_cols = [metrics_subq, bias_sublabel_table.c.label.label('bias_label'), *aliased_label_cols]
     labelled_q = session.query(*label_query_cols) \
@@ -200,6 +213,16 @@ def get_metrics(session, fill_id, population_id, properties_id, aggregations_id,
         metrics_q = metrics_q.filter(metric.aggregations_id == aggregations_id)
     if isinstance(aggregations_id, list):
         metrics_q = metrics_q.filter(metric.aggregations_id.in_(aggregations_id))
+    if isinstance(aggregations_id, dict):
+        for prop_pos, (prop_id, val) in enumerate(aggregations_id.items()):
+            prop_pos_after_bias = prop_pos+1
+            a_man = aliased(metric_aggregations_n)
+            val_predicate = val(a_man.value) if callable(val) else a_man.value == val
+            metrics_q = metrics_q.join(a_man, and_(metric.aggregations_id == a_man.id,
+                                       a_man.aggregation_order==prop_pos_after_bias,
+                                       a_man.property==prop_id,
+                                       val_predicate))
+
 
     # if a label_lang is defined we need to make a subquery
     if label_lang is not None:
@@ -264,12 +287,13 @@ def build_gap_response(properties_id, metrics_res, columns, label_lang, session)
 
     return data_points, represented_biases
 
+
 def make_represented_genders(metric_df, label_lang):
     """
     return a dict of the represented genders and  (maybe their label) to make life easy for the front end.
     :return:
     """
-    return dict(metric_df[['bias_value','bias_label']].drop_duplicates().to_dict('split')['data'])
+    return dict(metric_df[['bias_value', 'bias_label']].drop_duplicates().to_dict('split')['data'])
 
 
 def get_iso_codes_as_lookup_table(session, iso_subtype='iso_3166_1'):

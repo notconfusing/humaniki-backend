@@ -2,7 +2,7 @@ from datetime import datetime
 
 from sqlalchemy import and_
 
-from humaniki_schema.queries import get_exact_fill_id
+from humaniki_schema.queries import get_exact_fill_id, get_project_internal_id_from_wikiencoding
 from humaniki_schema import utils
 from humaniki_schema.schema import metric_properties_j, metric_properties_n, metric_aggregations_n
 from humaniki_schema.utils import Properties, make_fill_dt, HUMANIKI_SNAPSHOT_DATE_FMT
@@ -106,6 +106,11 @@ def is_property_exclusively_citizenship(properties_obj):
     elif isinstance(properties_obj, metric_properties_n):
         raise NotImplementedError
 
+def transform_ordered_aggregations_with_proj_internal_codes(ordered_aggregations, db_session):
+    proj_code = ordered_aggregations[Properties.PROJECT.value]
+    internal_id = get_project_internal_id_from_wikiencoding(proj_code, db_session)
+    ordered_aggregations[Properties.PROJECT.value] = internal_id
+    return ordered_aggregations
 
 def transform_ordered_aggregations_with_year_fns(ordered_aggregations):
     """
