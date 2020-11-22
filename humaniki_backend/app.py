@@ -5,7 +5,8 @@ from flask_cors import CORS
 
 from flask_sqlalchemy_session import flask_scoped_session
 
-from humaniki_backend.query import get_aggregations_ids, get_metrics, build_gap_response, build_metrics, get_metrics_count
+from humaniki_backend.query import get_aggregations_ids, get_metrics, build_gap_response, build_metrics, \
+    get_metrics_count, get_all_snapshot_dates
 from humaniki_backend.utils import determine_population_conflict, assert_gap_request_valid, \
     order_query_params, get_pid_from_str, determine_fill_id, is_property_exclusively_citizenship
 from humaniki_schema.queries import get_properties_obj, get_latest_fill_id
@@ -24,6 +25,11 @@ app.latest_fill_id = latest_fill_id
 def home():
     return jsonify(latest_fill_id, latest_fill_date)
 
+@app.route("/v1/available_snapshots/")
+def available_snapshots():
+    all_snaphot_dates = get_all_snapshot_dates(session)
+    return jsonify(all_snaphot_dates)
+
 
 @app.route("/v1/<string:bias>/gap/<string:snapshot>/<string:population>/properties")
 def gap(bias, snapshot, population):
@@ -36,13 +42,13 @@ def gap(bias, snapshot, population):
         # TODO include validating bias
         valid_request = assert_gap_request_valid(snapshot, population, query_params)
     except AssertionError as ae:
-        return jsonify(ae)
+        return jsonify(repr(ae))
     # handle snapshot
     requested_fill_id, requested_fill_date, snapshot_corrected = determine_fill_id(session, snapshot, latest_fill_id,
                                                                                    latest_fill_date)
     # print(f"Fills {requested_fill_id} {requested_fill_date}")
     if snapshot_corrected:
-        return_warnings['snapshot_corrected to'] = requested_fill_id
+        return_warnings['snapshot_corrected to'] = requested_fill_date
     # handle populations
     population_id, population_name, population_corrected = determine_population_conflict(population, query_params)
     if population_corrected:
@@ -57,13 +63,13 @@ def gap(bias, snapshot, population):
                                            bias_property=bias_property)
         # properties_id = get_properties_id(session, ordered_properties, bias_property=bias_property)
     except ValueError as ve:
-        errors['properties_id'] = str(ve)
+        errors['properties_id'] = repr(ve)
         print("Errors", errors)
     # get aggregations-id
     try:
         aggregations_id = get_aggregations_ids(session, ordered_query_params, non_orderable_query_params, as_subquery=True)
     except ValueError as ve:
-        errors['aggregations_id'] = str(ve)
+        errors['aggregations_id'] = repr(ve)
         print("Errors", errors)
     # get metric
     try:
@@ -73,9 +79,13 @@ def gap(bias, snapshot, population):
                                                     properties_id=properties_id, aggregations_id=aggregations_id,
                                                     label_lang=label_lang)
     except ValueError as ve:
-        errors['metrics'] = str(ve)
+        errors['metrics'] = repr(ve)
 
-    # convert table rows to jsonable dict
+    # there are errors return those.
+    if errors:
+        return jsonify(errors)
+
+
     meta = {'snapshot': str(requested_fill_date),
             'population': population_name,
             'population_corrected': population_corrected,

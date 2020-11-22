@@ -7,7 +7,7 @@ from humaniki_backend.utils import is_property_exclusively_citizenship, transfor
 from humaniki_schema import utils
 from humaniki_schema.queries import get_aggregations_obj
 from humaniki_schema.schema import metric, metric_aggregations_j, metric_properties_j, label, label_misc, \
-    metric_aggregations_n
+    metric_aggregations_n, fill
 
 from sqlalchemy import func, and_
 
@@ -309,3 +309,9 @@ def get_iso_codes_as_lookup_table(session, iso_subtype='iso_3166_1'):
 def get_metrics_count(session):
     metrics_count = session.query(func.count(metric.fill_id)).scalar()
     return metrics_count
+
+
+def get_all_snapshot_dates(session):
+    snapshots = session.query(fill).filter(fill.detail['active'] == True).all()
+    snapshot_dicts = [snapshot.to_dict() for snapshot in snapshots]
+    return snapshot_dicts
