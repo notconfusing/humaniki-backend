@@ -255,7 +255,7 @@ def build_gap_response(properties_id, metrics_res, columns, label_lang, session)
     metric_df = pd.DataFrame.from_records(metrics_res, columns=col_names)
     metric_df.to_dict()
     pandas_groupby_start = time.time()
-    agg_groups = metric_df.groupby(by=aggr_cols)
+    agg_groups = metric_df.groupby(by=aggr_cols) if aggr_cols else [('global', metric_df)]
     pandas_groupby_end = time.time()
     # accumulator pattern
     data_points = []
