@@ -27,7 +27,7 @@ def get_aggregations_ids(session, ordered_aggregations, non_orderable_params, as
     if has_dob_criteria:
         # make the year string into functions
         ordered_aggregations = transform_ordered_aggregations_with_year_fns(ordered_aggregations)
-    if has_project_criteria:
+    if has_project_criteria and ordered_aggregations[Properties.PROJECT.value] != 'all':
         # transform the project tag into an internal code
         ordered_aggregations = transform_ordered_aggregations_with_proj_internal_codes(ordered_aggregations, session)
 
@@ -215,13 +215,16 @@ def get_metrics(session, fill_id, population_id, properties_id, aggregations_id,
         metrics_q = metrics_q.filter(metric.aggregations_id.in_(aggregations_id))
     if isinstance(aggregations_id, dict):
         for prop_pos, (prop_id, val) in enumerate(aggregations_id.items()):
-            prop_pos_after_bias = prop_pos+1
-            a_man = aliased(metric_aggregations_n)
-            val_predicate = val(a_man.value) if callable(val) else a_man.value == val
-            metrics_q = metrics_q.join(a_man, and_(metric.aggregations_id == a_man.id,
-                                       a_man.aggregation_order==prop_pos_after_bias,
-                                       a_man.property==prop_id,
-                                       val_predicate))
+            if val == 'all':
+                continue
+            else:
+                prop_pos_after_bias = prop_pos+1
+                a_man = aliased(metric_aggregations_n)
+                val_predicate = val(a_man.value) if callable(val) else a_man.value == val
+                metrics_q = metrics_q.join(a_man, and_(metric.aggregations_id == a_man.id,
+                                           a_man.aggregation_order==prop_pos_after_bias,
+                                           a_man.property==prop_id,
+                                           val_predicate))
 
 
     # if a label_lang is defined we need to make a subquery
