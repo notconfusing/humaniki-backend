@@ -266,7 +266,7 @@ def build_gap_response(properties_id, metrics_res, columns, label_lang, session)
         group_name_as_list = group_name if isinstance(group_name, tuple) else [group_name]
         item_d = dict(zip(prop_names, group_name_as_list))
         values = dict(group[['bias_value', 'total']].to_dict('split')['data'])
-        labels_prop_order = group[label_cols].iloc[0].values
+        labels_prop_order = group[label_cols].iloc[0].values if label_cols else []
         item_labels = dict(zip(prop_names, labels_prop_order))
         if is_citizenship:
             try:
