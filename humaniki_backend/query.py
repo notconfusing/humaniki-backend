@@ -9,7 +9,7 @@ from humaniki_schema.queries import get_aggregations_obj
 from humaniki_schema.schema import metric, metric_aggregations_j, metric_properties_j, label, label_misc, \
     metric_aggregations_n, fill
 
-from sqlalchemy import func, and_
+from sqlalchemy import func, and_, desc
 
 import pandas as pd
 
@@ -315,6 +315,6 @@ def get_metrics_count(session):
 
 
 def get_all_snapshot_dates(session):
-    snapshots = session.query(fill).filter(fill.detail['active'] == True).all()
+    snapshots = session.query(fill).filter(fill.detail['active'] == True).order_by(desc(fill.date)).all()
     snapshot_dicts = [snapshot.to_dict() for snapshot in snapshots]
     return snapshot_dicts
