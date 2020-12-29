@@ -272,7 +272,8 @@ def build_gap_response(properties_id, metrics_res, columns, label_lang, session)
             try:
                 item_labels['iso_3166'] = iso_codes[group_name]
             except KeyError as ke:
-                print(f'iso code exception: {ke}')
+                # print(f'iso code exception: {ke}')
+                pass
         data_point = {'order': group_i,
                       'item': item_d,
                       'item_label': item_labels,
