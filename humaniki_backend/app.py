@@ -11,6 +11,9 @@ from humaniki_backend.utils import determine_population_conflict, assert_gap_req
     order_query_params, get_pid_from_str, determine_fill_id, is_property_exclusively_citizenship
 from humaniki_schema.queries import get_properties_obj, get_latest_fill_id
 from humaniki_schema.utils import Properties, make_fill_dt
+from humaniki_schema.log import get_logger
+
+log = get_logger(BASE_DIR=__file__)
 
 app = Flask(__name__)
 CORS(app)
@@ -23,6 +26,7 @@ app.latest_fill_id = latest_fill_id
 
 @app.route("/")
 def home():
+    log.info('home route called')
     return jsonify(latest_fill_id, latest_fill_date)
 
 @app.route("/v1/available_snapshots/")
@@ -64,13 +68,13 @@ def gap(bias, snapshot, population):
         # properties_id = get_properties_id(session, ordered_properties, bias_property=bias_property)
     except ValueError as ve:
         errors['properties_id'] = repr(ve)
-        print("Errors", errors)
+        log.exception(errors)
     # get aggregations-id
     try:
         aggregations_id = get_aggregations_ids(session, ordered_query_params, non_orderable_query_params, as_subquery=True)
     except ValueError as ve:
         errors['aggregations_id'] = repr(ve)
-        print("Errors", errors)
+        log.exception(errors)
     # get metric
     try:
         # default the label lang to 'en' if not set

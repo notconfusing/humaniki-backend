@@ -14,6 +14,8 @@ from sqlalchemy import func, and_, desc
 import pandas as pd
 
 from humaniki_schema.utils import Properties
+from humaniki_schema.log import get_logger
+log = get_logger(BASE_DIR=__file__)
 
 
 def get_aggregations_ids(session, ordered_aggregations, non_orderable_params, as_subquery=True):
@@ -69,8 +71,8 @@ def build_metrics(session, fill_id, population_id, properties_id, aggregations_i
     # timing
     query_metrics_seconds_taken = build_metrics_query_end_time - build_metrics_start_time
     group_metrics_seconds_taken = build_metrics_grouping_end_time - build_metrics_query_end_time
-    print(f"Querying metrics repsponse took {'%.3f'%query_metrics_seconds_taken} seconds")
-    print(f"Grouping metrics repsponse took {'%.3f'%group_metrics_seconds_taken} seconds")
+    log.debug(f"Querying metrics repsponse took {'%.3f'%query_metrics_seconds_taken} seconds")
+    log.debug(f"Grouping metrics repsponse took {'%.3f'%group_metrics_seconds_taken} seconds")
     return metrics_response, represented_biases
 
 
@@ -232,11 +234,11 @@ def get_metrics(session, fill_id, population_id, properties_id, aggregations_id,
         metrics_subq = metrics_q.subquery('metrics_driver')
         metrics_q = label_metric_query(session, metrics_subq, properties, label_lang)
 
-    print(f'metrics_q is:'
+    log.debug(f'metrics_q is:'
           f' {metrics_q.statement.compile(compile_kwargs={"literal_binds": True})}')
     metrics = metrics_q.all()
     metrics_columns = metrics_q.column_descriptions
-    print(f'Number of metrics to return are {len(metrics)}')
+    log.debug(f'Number of metrics to return are {len(metrics)}')
     return metrics, metrics_columns
 
 
@@ -272,7 +274,7 @@ def build_gap_response(properties_id, metrics_res, columns, label_lang, session)
             try:
                 item_labels['iso_3166'] = iso_codes[group_name]
             except KeyError as ke:
-                # print(f'iso code exception: {ke}')
+                # log.debug(f'iso code exception: {ke}')
                 pass
         data_point = {'order': group_i,
                       'item': item_d,
@@ -284,8 +286,8 @@ def build_gap_response(properties_id, metrics_res, columns, label_lang, session)
         #     data_point['labels'] = labels
         data_points.append(data_point)
     pandas_group_iteration_end = time.time()
-    print(f'pandas groupby took {pandas_groupby_end-pandas_groupby_start} seconds')
-    print(f'pandas group iteration took {pandas_group_iteration_end-pandas_groupby_end} seconds')
+    log.debug(f'pandas groupby took {pandas_groupby_end-pandas_groupby_start} seconds')
+    log.debug(f'pandas group iteration took {pandas_group_iteration_end-pandas_groupby_end} seconds')
 
     represented_biases = make_represented_genders(metric_df, label_lang) if label_lang else None
 
