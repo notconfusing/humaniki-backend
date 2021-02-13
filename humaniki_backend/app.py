@@ -20,6 +20,7 @@ CORS(app)
 session = flask_scoped_session(session_factory, app)
 
 # Note this requires updating or the process restarting after a new fill.
+# TODO: have this be a function that can be called and updated.
 latest_fill_id, latest_fill_date = get_latest_fill_id(session)
 app.latest_fill_id = latest_fill_id
 
@@ -28,6 +29,7 @@ app.latest_fill_id = latest_fill_id
 def home():
     log.info('home route called')
     return jsonify(latest_fill_id, latest_fill_date)
+
 
 @app.route("/v1/available_snapshots/")
 def available_snapshots():
@@ -71,7 +73,8 @@ def gap(bias, snapshot, population):
         log.exception(errors)
     # get aggregations-id
     try:
-        aggregations_id = get_aggregations_ids(session, ordered_query_params, non_orderable_query_params, as_subquery=True)
+        aggregations_id = get_aggregations_ids(session, ordered_query_params, non_orderable_query_params,
+                                               as_subquery=True)
     except ValueError as ve:
         errors['aggregations_id'] = repr(ve)
         log.exception(errors)
@@ -87,8 +90,7 @@ def gap(bias, snapshot, population):
 
     # there are errors return those.
     if errors:
-        return jsonify(errors)
-
+        return jsonify(errors=errors)
 
     meta = {'snapshot': str(requested_fill_date),
             'population': population_name,
@@ -101,6 +103,14 @@ def gap(bias, snapshot, population):
         meta['bias_labels'] = represented_biases
     full_response = {'meta': meta, 'metrics': metrics}
     return jsonify(**full_response)
+
+
+@app.route("/v1/error_test/")
+def error_test():
+    error_dict = {"metrics": repr(ValueError("I'm a metrics error")),
+                  "aggregation_id": repr(NameError("I'm an aggergations error"))
+                  }
+    return jsonify(errors=error_dict)
 
 
 if __name__ == "__main__":
