@@ -43,12 +43,20 @@ def gap(bias, snapshot, population):
     return_warnings = {}
     errors = {}
     query_params = request.values
-    # TODO catch these errors in their constituent parts and then have the logic handled up here
+
+    # If a client explicitly asks an error to be sent back.
+    if "error_test" in query_params.keys():
+        errors['test'] = repr(ValueError('sending you back an a value error'))
+        errors['test_another'] = repr(ValueError('simulating what mutliple errors would look like'))
+        return jsonify(errors=errors)
+
     try:
         # TODO include validating bias
         valid_request = assert_gap_request_valid(snapshot, population, query_params)
     except AssertionError as ae:
-        return jsonify(repr(ae))
+        errors['validation']=repr(ae)
+        #in this case fail immediately
+        return jsonify(errors=errors)
     # handle snapshot
     requested_fill_id, requested_fill_date, snapshot_corrected = determine_fill_id(session, snapshot, latest_fill_id,
                                                                                    latest_fill_date)
@@ -103,14 +111,6 @@ def gap(bias, snapshot, population):
         meta['bias_labels'] = represented_biases
     full_response = {'meta': meta, 'metrics': metrics}
     return jsonify(**full_response)
-
-
-@app.route("/v1/error_test/")
-def error_test():
-    error_dict = {"metrics": repr(ValueError("I'm a metrics error")),
-                  "aggregation_id": repr(NameError("I'm an aggergations error"))
-                  }
-    return jsonify(errors=error_dict)
 
 
 if __name__ == "__main__":
