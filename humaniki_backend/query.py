@@ -7,7 +7,7 @@ from humaniki_backend.utils import is_property_exclusively_citizenship, transfor
 from humaniki_schema import utils
 from humaniki_schema.queries import get_aggregations_obj
 from humaniki_schema.schema import metric, metric_aggregations_j, metric_properties_j, label, label_misc, \
-    metric_aggregations_n, fill
+    metric_aggregations_n, fill, metric_coverage
 
 from sqlalchemy import func, and_, desc
 
@@ -15,6 +15,7 @@ import pandas as pd
 
 from humaniki_schema.utils import Properties
 from humaniki_schema.log import get_logger
+
 log = get_logger(BASE_DIR=__file__)
 
 
@@ -71,8 +72,8 @@ def build_metrics(session, fill_id, population_id, properties_id, aggregations_i
     # timing
     query_metrics_seconds_taken = build_metrics_query_end_time - build_metrics_start_time
     group_metrics_seconds_taken = build_metrics_grouping_end_time - build_metrics_query_end_time
-    log.debug(f"Querying metrics repsponse took {'%.3f'%query_metrics_seconds_taken} seconds")
-    log.debug(f"Grouping metrics repsponse took {'%.3f'%group_metrics_seconds_taken} seconds")
+    log.debug(f"Querying metrics repsponse took {'%.3f' % query_metrics_seconds_taken} seconds")
+    log.debug(f"Grouping metrics repsponse took {'%.3f' % group_metrics_seconds_taken} seconds")
     return metrics_response, represented_biases
 
 
@@ -220,14 +221,13 @@ def get_metrics(session, fill_id, population_id, properties_id, aggregations_id,
             if val == 'all':
                 continue
             else:
-                prop_pos_after_bias = prop_pos+1
+                prop_pos_after_bias = prop_pos + 1
                 a_man = aliased(metric_aggregations_n)
                 val_predicate = val(a_man.value) if callable(val) else a_man.value == val
                 metrics_q = metrics_q.join(a_man, and_(metric.aggregations_id == a_man.id,
-                                           a_man.aggregation_order==prop_pos_after_bias,
-                                           a_man.property==prop_id,
-                                           val_predicate))
-
+                                                       a_man.aggregation_order == prop_pos_after_bias,
+                                                       a_man.property == prop_id,
+                                                       val_predicate))
 
     # if a label_lang is defined we need to make a subquery
     if label_lang is not None:
@@ -235,7 +235,7 @@ def get_metrics(session, fill_id, population_id, properties_id, aggregations_id,
         metrics_q = label_metric_query(session, metrics_subq, properties, label_lang)
 
     log.debug(f'metrics_q is:'
-          f' {metrics_q.statement.compile(compile_kwargs={"literal_binds": True})}')
+              f' {metrics_q.statement.compile(compile_kwargs={"literal_binds": True})}')
     metrics = metrics_q.all()
     metrics_columns = metrics_q.column_descriptions
     log.debug(f'Number of metrics to return are {len(metrics)}')
@@ -286,8 +286,8 @@ def build_gap_response(properties_id, metrics_res, columns, label_lang, session)
         #     data_point['labels'] = labels
         data_points.append(data_point)
     pandas_group_iteration_end = time.time()
-    log.debug(f'pandas groupby took {pandas_groupby_end-pandas_groupby_start} seconds')
-    log.debug(f'pandas group iteration took {pandas_group_iteration_end-pandas_groupby_end} seconds')
+    log.debug(f'pandas groupby took {pandas_groupby_end - pandas_groupby_start} seconds')
+    log.debug(f'pandas group iteration took {pandas_group_iteration_end - pandas_groupby_end} seconds')
 
     represented_biases = make_represented_genders(metric_df, label_lang) if label_lang else None
 
@@ -321,3 +321,31 @@ def get_all_snapshot_dates(session):
     snapshots = session.query(fill).filter(fill.detail['active'] == True).order_by(desc(fill.date)).all()
     snapshot_dicts = [snapshot.to_dict() for snapshot in snapshots]
     return snapshot_dicts
+
+
+def get_coverage(session, population_id, properties_id, fill_id):
+    metric_coverage_sql = f""" select n.total_with_properties / d.total_with_properties as coverage
+                                from
+                            (select
+                                   total_with_properties,
+                                   'n' as nd,
+                                    'k' as k
+                            from metric_coverage
+                            where fill_id={fill_id} and properties_id={properties_id} and population_id={population_id}) n
+                            join
+                            (select
+                                   total_with_properties,
+                                   'd' as nd,
+                                  'k' as k
+                            from metric_coverage
+                            where fill_id={fill_id}
+                              -- i really hope the fact holds that this is the numerator we want.
+                              and properties_id=(select id
+                                                from metric_properties_j
+                                                where properties_len=0)
+                              and population_id=2) d
+                            on n.k = d.k
+"""
+    coverage_decimal = session.execute(metric_coverage_sql).scalar()
+    coverage = float(coverage_decimal)
+    return coverage

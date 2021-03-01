@@ -6,7 +6,7 @@ from flask_cors import CORS
 from flask_sqlalchemy_session import flask_scoped_session
 
 from humaniki_backend.query import get_aggregations_ids, get_metrics, build_gap_response, build_metrics, \
-    get_metrics_count, get_all_snapshot_dates
+    get_metrics_count, get_all_snapshot_dates, get_coverage
 from humaniki_backend.utils import determine_population_conflict, assert_gap_request_valid, \
     order_query_params, get_pid_from_str, determine_fill_id, is_property_exclusively_citizenship
 from humaniki_schema.queries import get_properties_obj, get_latest_fill_id
@@ -79,6 +79,10 @@ def gap(bias, snapshot, population):
     except ValueError as ve:
         errors['properties_id'] = repr(ve)
         log.exception(errors)
+
+    # get coverage
+    coverage = get_coverage(session=session, population_id=population_id, properties_id=properties_id.id, fill_id=requested_fill_id)
+
     # get aggregations-id
     try:
         aggregations_id = get_aggregations_ids(session, ordered_query_params, non_orderable_query_params,
@@ -106,7 +110,8 @@ def gap(bias, snapshot, population):
             'label_lang': label_lang,
             'bias': bias,
             'bias_property': bias_property,
-            'aggregation_properties': [Properties(p).name for p in properties_id.properties]}
+            'aggregation_properties': [Properties(p).name for p in properties_id.properties],
+            'coverage': coverage,}
     if represented_biases:
         meta['bias_labels'] = represented_biases
     full_response = {'meta': meta, 'metrics': metrics}
