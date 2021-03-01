@@ -347,5 +347,8 @@ def get_coverage(session, population_id, properties_id, fill_id):
                             on n.k = d.k
 """
     coverage_decimal = session.execute(metric_coverage_sql).scalar()
-    coverage = float(coverage_decimal)
+    try:
+        coverage = float(coverage_decimal)
+    except TypeError:
+        coverage = None
     return coverage
