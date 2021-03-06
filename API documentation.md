@@ -28,6 +28,7 @@ N.b. `humanikidata.org` points to `humaniki.wmcloud.org` for now, so if you want
 ### Facet = "gap"
 * Syntax: `/v1/gender/gap/{snapshot}/{population}/properties{?query-string)`
 * Examples: `https://humaniki.wmcloud.org/api/v1/gender/gap/latest/gte_one_sitelink/properties?date_of_birth=1900~2000&label_lang=en`
+* Interactive playground: make any search on [https://humaniki.wmcloud.org/combine-search](https://humaniki.wmcloud.org/combine-search) and use the "API link" button, to see how our search tool queries the backend.
 * params
    * Snapshot
       * "latest"
