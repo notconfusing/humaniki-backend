@@ -324,6 +324,7 @@ def get_all_snapshot_dates(session):
 
 
 def get_coverage(session, population_id, properties_id, fill_id):
+    ## TODO, use sqlalchemy parameters not f-strings to sanitize inputs
     metric_coverage_sql = f""" select n.total_with_properties / d.total_with_properties as coverage
                                 from
                             (select
