@@ -344,7 +344,7 @@ def get_coverage(session, population_id, properties_id, fill_id):
                               and properties_id=(select id
                                                 from metric_properties_j
                                                 where properties_len=0)
-                              and population_id=2) d
+                              and population_id={population_id}) d
                             on n.k = d.k
 """
     coverage_decimal = session.execute(metric_coverage_sql).scalar()
