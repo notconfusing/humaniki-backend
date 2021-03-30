@@ -3,7 +3,7 @@ import time
 from sqlalchemy.orm import aliased
 
 from humaniki_backend.utils import is_property_exclusively_citizenship, transform_ordered_aggregations_with_year_fns, \
-    transform_ordered_aggregations_with_proj_internal_codes
+    transform_ordered_aggregations_with_proj_internal_codes, get_transform_ordered_aggregation_qid_match
 from humaniki_schema import utils
 from humaniki_schema.queries import get_aggregations_obj
 from humaniki_schema.schema import metric, metric_aggregations_j, metric_properties_j, label, label_misc, \
@@ -13,37 +13,38 @@ from sqlalchemy import func, and_, desc
 
 import pandas as pd
 
-from humaniki_schema.utils import Properties
+from humaniki_schema.utils import Properties, get_enum_from_str
 from humaniki_schema.log import get_logger
 
 log = get_logger(BASE_DIR=__file__)
 
 
-def get_aggregations_ids(session, ordered_aggregations, non_orderable_params, as_subquery=True):
-    # aggregations_id is None indicates there's no constraint on the aggregation_id
-    has_no_specific_aggregation_criteria = all([v == 'all' for v in ordered_aggregations.values()])
-    has_dob_criteria = any([pid in [Properties.DATE_OF_BIRTH.value, Properties.DATE_OF_DEATH.value] for pid in
-                            ordered_aggregations.keys()])
-    has_project_criteria = any([pid == Properties.PROJECT.value for pid in ordered_aggregations.keys()])
-    if has_no_specific_aggregation_criteria:
-        return None
-    if has_dob_criteria:
-        # make the year string into functions
-        ordered_aggregations = transform_ordered_aggregations_with_year_fns(ordered_aggregations)
-    if has_project_criteria and ordered_aggregations[Properties.PROJECT.value] != 'all':
-        # transform the project tag into an internal code
-        ordered_aggregations = transform_ordered_aggregations_with_proj_internal_codes(ordered_aggregations, session)
+def get_aggregations_id_preds(session, ordered_aggregations, non_orderable_params, as_subquery=True):
+    '''transform the ordered_aggreation dict of {prop:value} to {prop: sqlalchemy predicate} for use later on
+    as subquery. if the value is specified as 'all' then leave untouched.'''
+    # note all pred_fns take and transform in place an ordered_aggregations_dict,
+    # they also take session (although I would eventually like to remove that, so the whole lookup can happen in one
+    # transaction).
+    prop_pred_fn_map = {Properties.PROJECT: transform_ordered_aggregations_with_proj_internal_codes,
+                        Properties.DATE_OF_BIRTH: transform_ordered_aggregations_with_year_fns,
+                        Properties.DATE_OF_DEATH: transform_ordered_aggregations_with_year_fns,
+                        Properties.CITIZENSHIP: get_transform_ordered_aggregation_qid_match(Properties.CITIZENSHIP),
+                        Properties.OCCUPATION: get_transform_ordered_aggregation_qid_match(Properties.OCCUPATION)}
+
+    ordered_aggregations_preds = ordered_aggregations # we will be overwriting this
+    for prop_id, val in ordered_aggregations.items():
+        if val.lower() == 'all':
+            continue
+        else:
+            pred_fn = prop_pred_fn_map[Properties(prop_id)]
+            ordered_aggregations_preds = pred_fn(ordered_aggregations_preds, session)
 
     if as_subquery:
         # optimized
-        return ordered_aggregations
+        return ordered_aggregations_preds
     else:
-        # getting ids for an "in_(*agg_ids)" statement
-        aggregation_objs = get_aggregations_obj(bias_value=None, dimension_values=ordered_aggregations,
-                                                session=session, table=metric_aggregations_n)
-        # making these unique, but of course the real optimization is to return this as a subquery
-        aggregations_ids = list(set([a.id for a in aggregation_objs]))
-    return aggregations_ids
+        raise AssertionError('please only as subquery for now on.')
+
 
 
 def build_metrics(session, fill_id, population_id, properties_id, aggregations_id, label_lang):

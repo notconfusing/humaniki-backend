@@ -5,7 +5,7 @@ from flask_cors import CORS
 
 from flask_sqlalchemy_session import flask_scoped_session
 
-from humaniki_backend.query import get_aggregations_ids, get_metrics, build_gap_response, build_metrics, \
+from humaniki_backend.query import get_aggregations_id_preds, get_metrics, build_gap_response, build_metrics, \
     get_metrics_count, get_all_snapshot_dates, get_coverage
 from humaniki_backend.utils import determine_population_conflict, assert_gap_request_valid, \
     order_query_params, get_pid_from_str, determine_fill_id, is_property_exclusively_citizenship
@@ -85,17 +85,17 @@ def gap(bias, snapshot, population):
 
     # get aggregations-id
     try:
-        aggregations_id = get_aggregations_ids(session, ordered_query_params, non_orderable_query_params,
-                                               as_subquery=True)
+        aggregations_id_preds = get_aggregations_id_preds(session, ordered_query_params, non_orderable_query_params,
+                                                          as_subquery=True)
     except ValueError as ve:
-        errors['aggregations_id'] = repr(ve)
+        errors['aggregations_id_preds'] = repr(ve)
         log.exception(errors)
     # get metric
     try:
         # default the label lang to 'en' if not set
         label_lang = non_orderable_query_params['label_lang'] if 'label_lang' in non_orderable_query_params else None
         metrics, represented_biases = build_metrics(session, fill_id=requested_fill_id, population_id=population_id,
-                                                    properties_id=properties_id, aggregations_id=aggregations_id,
+                                                    properties_id=properties_id, aggregations_id=aggregations_id_preds,
                                                     label_lang=label_lang)
     except ValueError as ve:
         errors['metrics'] = repr(ve)
