@@ -113,6 +113,7 @@ def get_transform_ordered_aggregation_qid_match(property):
         def exact_fn(agg_value):
             return agg_value == int(target_qid)
         ordered_aggregations[getattr(property, 'value')] = exact_fn
+        return ordered_aggregations
     return transform_ordered_aggregation_qid_match
 
 def transform_ordered_aggregations_with_proj_internal_codes(ordered_aggregations, db_session):
