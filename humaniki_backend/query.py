@@ -9,7 +9,7 @@ from humaniki_schema.queries import get_aggregations_obj
 from humaniki_schema.schema import metric, metric_aggregations_j, metric_properties_j, label, label_misc, \
     metric_aggregations_n, fill, metric_coverage
 
-from sqlalchemy import func, and_, desc
+from sqlalchemy import func, and_, desc, text
 
 import pandas as pd
 
@@ -326,7 +326,7 @@ def get_all_snapshot_dates(session):
 
 def get_coverage(session, population_id, properties_id, fill_id):
     ## TODO, use sqlalchemy parameters not f-strings to sanitize inputs
-    metric_coverage_sql = f""" select n.total_with_properties / d.total_with_properties as coverage
+    metric_coverage_sql = text(f""" select n.total_with_properties / d.total_with_properties as coverage
                                 from
                             (select
                                    total_with_properties,
@@ -347,7 +347,7 @@ def get_coverage(session, population_id, properties_id, fill_id):
                                                 where properties_len=0)
                               and population_id={population_id}) d
                             on n.k = d.k
-"""
+                              """)
     coverage_decimal = session.execute(metric_coverage_sql).scalar()
     try:
         coverage = float(coverage_decimal)
